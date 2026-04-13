@@ -1,0 +1,19 @@
+# Reuses the parent repo's images. Point this into your own project if you're
+# using emass-mock as a dependency — just pull ghcr.io/pretorin-ai/emass-mock
+# and ghcr.io/stoplight/prism:5 directly.
+services:
+  prism:
+    image: stoplight/prism:5
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "/spec/eMASSRestOpenApi.yaml"]
+    volumes:
+      - ../../vendor/emass_client/eMASSRestOpenApi.yaml:/spec/eMASSRestOpenApi.yaml:ro
+
+  emass-mock:
+    build:
+      context: ../..
+    ports:
+      - "18080:8080"
+    environment:
+      PRISM_URL: http://prism:4010
+      EMASS_MOCK_API_KEY: test-api-key
+    depends_on: [prism]

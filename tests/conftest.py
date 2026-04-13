@@ -13,11 +13,11 @@ def client() -> TestClient:
     app = create_app()
     with TestClient(app) as c:
         yield c
-    # Reset shared singletons between tests.
     get_store().reset((1, 2, 3))
     get_failures().reset()
 
 
 @pytest.fixture
 def headers() -> dict[str, str]:
-    return {"api-key": "test-api-key"}
+    # user-uid is read but not validated; send it anyway to match real clients.
+    return {"api-key": "test-api-key", "user-uid": "test-user"}

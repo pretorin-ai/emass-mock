@@ -1,4 +1,18 @@
+# Default stack: Prism serves spec-conformant responses for unhandled paths,
+# the sidecar serves stateful handlers for the endpoints integrators actually
+# test against (controls, test-results, artifacts, poams, systems).
+#
+#   prism       :4010 (internal)  → MITRE eMASS OpenAPI spec
+#   emass-mock  :8080 (exposed)   → your code points here
 services:
+  prism:
+    image: stoplight/prism:5
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "/spec/eMASSRestOpenApi.yaml"]
+    volumes:
+      - ./vendor/emass_client/eMASSRestOpenApi.yaml:/spec/eMASSRestOpenApi.yaml:ro
+    expose:
+      - "4010"
+
   emass-mock:
     build: .
     image: ghcr.io/pretorin-ai/emass-mock:dev
@@ -8,6 +22,9 @@ services:
       EMASS_MOCK_API_KEY: test-api-key
       EMASS_MOCK_REQUIRE_API_KEY: "true"
       EMASS_MOCK_SEED_SYSTEM_IDS: "1,2,3"
+      PRISM_URL: http://prism:4010
+    depends_on:
+      - prism
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
       interval: 10s

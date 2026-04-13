@@ -14,8 +14,9 @@ class FailureInjectionMiddleware(BaseHTTPMiddleware):
     """Short-circuits matching requests with a configured error status."""
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        # Admin routes bypass failure injection so operators can always reset.
-        if request.url.path.startswith("/_admin"):
+        # Admin + UI routes bypass failure injection so operators can always recover.
+        path = request.url.path
+        if path.startswith("/_admin") or path.startswith("/ui") or path == "/health":
             return await call_next(request)
 
         await maybe_sleep()
@@ -32,4 +33,4 @@ class FailureInjectionMiddleware(BaseHTTPMiddleware):
 
 
 def _inject(status_code: int) -> JSONResponse:
-    return error(status_code, f"Injected failure ({status_code})", error_code="INJECTED")
+    return error(status_code, f"Injected failure ({status_code})")

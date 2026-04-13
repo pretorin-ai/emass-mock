@@ -1,4 +1,10 @@
-"""POST /api/systems/{system_id}/poams — create POA&Ms."""
+"""POST /api/systems/{systemId}/poams — stateful handler.
+
+Response shape matches MITRE spec `PoamResponsePostPutDelete`:
+    {"meta": {"code": 200}, "data": [PoamPostPutDel, ...]}
+Each `PoamPostPutDel` row has `systemId`, `poamId` (server-assigned),
+and `externalUid` if provided.
+"""
 
 from __future__ import annotations
 
@@ -18,12 +24,16 @@ async def create_poams(system_id: int, payload: list[dict[str, Any]]):
     record = get_store().get_system(system_id)
     if record is None:
         return error(404, f"System {system_id} not found")
-    record.poams.extend(payload)
-    # Assign synthetic poamIds so clients can correlate.
-    data = [
-        {"poamId": 1000 + len(record.poams) - len(payload) + i, "status": "accepted"}
-        for i, _ in enumerate(payload)
-    ]
+
+    data: list[dict[str, Any]] = []
+    for poam in payload:
+        poam_id = record.next_poam_id()
+        stored = {**poam, "systemId": system_id, "poamId": poam_id}
+        record.poams.append(stored)
+        item = {"systemId": system_id, "poamId": poam_id}
+        if poam.get("externalUid") is not None:
+            item["externalUid"] = poam["externalUid"]
+        data.append(item)
     return ok(data)
 
 

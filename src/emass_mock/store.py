@@ -1,7 +1,11 @@
-"""In-memory store for systems, controls, test results, artifacts, POA&Ms.
+"""In-memory state store powering deterministic round-trips.
 
-Not persistent. Reset via the admin API. Thread-safety is not a concern for
-typical mock-server use (single uvicorn worker, test scenarios are sequential).
+This is the core of what this harness adds on top of Stoplight Prism. Every
+write handler mirrors payloads into the store; every read handler serves from
+it. Without this, tests cannot assert "I wrote X, GET returned X."
+
+Not persistent across restarts. Reset via the admin API between test runs.
+Single-process, single-worker assumptions — fine for a test harness.
 """
 
 from __future__ import annotations
@@ -19,6 +23,12 @@ class SystemRecord:
     test_results: list[dict[str, Any]] = field(default_factory=list)
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     poams: list[dict[str, Any]] = field(default_factory=list)
+    _poam_counter: int = 0
+
+    def next_poam_id(self) -> int:
+        self._poam_counter += 1
+        # Real eMASS poamIds are large; start at 1000 for readability.
+        return 1000 + self._poam_counter
 
 
 class Store:
@@ -27,7 +37,8 @@ class Store:
 
     def seed(self, system_ids: tuple[int, ...]) -> None:
         for sid in system_ids:
-            self.systems[sid] = SystemRecord(system_id=sid, acronym=f"MOCK-{sid}")
+            if sid not in self.systems:
+                self.systems[sid] = SystemRecord(system_id=sid, acronym=f"MOCK-{sid}")
 
     def reset(self, system_ids: tuple[int, ...]) -> None:
         self.systems.clear()
