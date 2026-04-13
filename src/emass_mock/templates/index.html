@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}emass-mock — inspector{% endblock %}
+{% block content %}
+<h2>Systems</h2>
+<table>
+    <thead><tr><th>ID</th><th>Acronym</th><th>Controls</th><th>Test Results</th><th>Artifacts</th><th>POA&amp;Ms</th></tr></thead>
+    <tbody>
+    {% for s in systems %}
+        <tr>
+            <td><a href="/ui/systems/{{ s.system_id }}">{{ s.system_id }}</a></td>
+            <td>{{ s.acronym }}</td>
+            <td>{{ s.controls|length }}</td>
+            <td>{{ s.test_results|length }}</td>
+            <td>{{ s.artifacts|length }}</td>
+            <td>{{ s.poams|length }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Failure injection</h2>
+<p>
+    <span class="pill {% if failures.global_status %}pill-alert{% endif %}">
+        global_status: {{ failures.global_status or "—" }}
+    </span>
+    <span class="pill">latency: {{ failures.latency_seconds }}s</span>
+    <span class="pill {% if failures.control_status %}pill-alert{% endif %}">
+        per-control: {{ failures.control_status|length }} rule(s)
+    </span>
+</p>
+{% if failures.control_status %}
+<ul>
+    {% for acronym, code in failures.control_status.items() %}
+        <li><code>{{ acronym }}</code> → <strong>{{ code }}</strong></li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<form action="/ui/failures" method="post">
+    <div class="grid">
+        <label>Global status override
+            <input type="number" name="global_status" placeholder="e.g. 503" value="{{ failures.global_status or '' }}" />
+        </label>
+        <label>Latency (seconds)
+            <input type="number" step="0.1" name="latency_seconds" value="{{ failures.latency_seconds }}" />
+        </label>
+    </div>
+    <div class="grid">
+        <label>Control acronym
+            <input type="text" name="control_acronym" placeholder="SC-7" />
+        </label>
+        <label>Status to return for that control
+            <input type="number" name="control_status" placeholder="422" />
+        </label>
+    </div>
+    <button type="submit">Apply</button>
+</form>
+
+<div class="grid">
+    <form action="/ui/failures/clear" method="post">
+        <button type="submit" class="secondary">Clear all failures</button>
+    </form>
+    <form action="/ui/reset" method="post"
+          onsubmit="return confirm('Reset all in-memory state?')">
+        <button type="submit" class="contrast">Reset mock state</button>
+    </form>
+</div>
+{% endblock %}

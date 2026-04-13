@@ -1,0 +1,15 @@
+services:
+  emass-mock:
+    build: .
+    image: ghcr.io/pretorin-ai/emass-mock:dev
+    ports:
+      - "8080:8080"
+    environment:
+      EMASS_MOCK_API_KEY: test-api-key
+      EMASS_MOCK_REQUIRE_API_KEY: "true"
+      EMASS_MOCK_SEED_SYSTEM_IDS: "1,2,3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}System {{ system.system_id }} — emass-mock{% endblock %}
+{% block content %}
+<h2>System {{ system.system_id }} <small>({{ system.acronym }})</small></h2>
+<p><a href="/ui/">← back to systems</a></p>
+
+<h3>Controls ({{ system.controls|length }})</h3>
+{% if system.controls %}
+<table>
+    <thead><tr><th>Acronym</th><th>Payload</th></tr></thead>
+    <tbody>
+    {% for acronym, ctrl in system.controls.items() %}
+        <tr><td><code>{{ acronym }}</code></td><td><pre>{{ ctrl|tojson(indent=2) }}</pre></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}<p><em>No controls pushed yet.</em></p>{% endif %}
+
+<h3>Test Results ({{ system.test_results|length }})</h3>
+{% if system.test_results %}
+<pre>{{ system.test_results|tojson(indent=2) }}</pre>
+{% else %}<p><em>None.</em></p>{% endif %}
+
+<h3>Artifacts ({{ system.artifacts|length }})</h3>
+{% if system.artifacts %}
+<pre>{{ system.artifacts|tojson(indent=2) }}</pre>
+{% else %}<p><em>None.</em></p>{% endif %}
+
+<h3>POA&amp;Ms ({{ system.poams|length }})</h3>
+{% if system.poams %}
+<pre>{{ system.poams|tojson(indent=2) }}</pre>
+{% else %}<p><em>None.</em></p>{% endif %}
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>{% block title %}emass-mock{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        .mock-banner {
+            background: #ffb300;
+            color: #000;
+            text-align: center;
+            padding: 0.5rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+        main.container { padding-top: 1rem; }
+        .grid-kv { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; }
+        .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #eee; font-size: 0.85em; }
+        .pill-alert { background: #ffe0e0; }
+        pre { max-height: 24rem; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="mock-banner">
+        MOCK — this is emass-mock, not a real eMASS deployment. Not affiliated with DoD or MITRE.
+    </div>
+    <main class="container">
+        <nav>
+            <ul><li><strong><a href="/ui/">emass-mock</a></strong></li></ul>
+            <ul>
+                <li><a href="/docs">API docs</a></li>
+                <li><a href="https://github.com/pretorin-ai/emass-mock" target="_blank">GitHub</a></li>
+            </ul>
+        </nav>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
