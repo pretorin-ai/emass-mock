@@ -4,13 +4,14 @@ version = "0.1.0"
 description = "Open-source mock server for the eMASS REST API."
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [{ name = "Pretorin AI" }]
 keywords = ["emass", "fedramp", "dod", "compliance", "mock", "testing"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: FastAPI",
     "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Testing :: Mocking",
@@ -51,7 +52,7 @@ emass_mock = ["templates/*.html"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
