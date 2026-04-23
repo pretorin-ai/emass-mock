@@ -14,6 +14,9 @@ class Settings:
     require_api_key: bool
     """If False, skip api-key header validation."""
 
+    require_user_uid_on_all: bool
+    """If True, require `user-uid` for all intercepted eMASS endpoints."""
+
     seed_system_ids: tuple[int, ...]
     """System IDs pre-seeded in the state store on startup."""
 
@@ -29,6 +32,8 @@ def load_settings() -> Settings:
     return Settings(
         api_key=os.getenv("EMASS_MOCK_API_KEY", "test-api-key"),
         require_api_key=os.getenv("EMASS_MOCK_REQUIRE_API_KEY", "true").lower() != "false",
+        require_user_uid_on_all=os.getenv("EMASS_MOCK_REQUIRE_USER_UID_ON_ALL", "true").lower()
+        != "false",
         seed_system_ids=seed_ids,
         prism_url=os.getenv("PRISM_URL") or None,
     )

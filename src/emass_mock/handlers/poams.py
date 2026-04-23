@@ -12,11 +12,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from ..auth import require_api_key
+from ..auth import require_emu_auth
 from ..envelope import error, ok
 from ..store import get_store
 
-router = APIRouter(prefix="/api", tags=["poams"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api", tags=["poams"], dependencies=[Depends(require_emu_auth)])
 
 
 @router.post("/systems/{system_id}/poams")

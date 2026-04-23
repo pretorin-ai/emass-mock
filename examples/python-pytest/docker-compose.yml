@@ -16,4 +16,5 @@ services:
     environment:
       PRISM_URL: http://prism:4010
       EMASS_MOCK_API_KEY: test-api-key
+      EMASS_MOCK_REQUIRE_USER_UID_ON_ALL: "true"
     depends_on: [prism]
