@@ -151,7 +151,7 @@ All above are also available via the inspector UI.
 - `GET /api/systems`, `GET /api/systems/{id}` — seeded deterministically
 - `PUT /api/systems/{id}/controls` + `GET`
 - `POST /api/systems/{id}/test-results` + `GET`
-- `POST /api/systems/{id}/artifacts` + `GET`
+- `POST /api/systems/{id}/artifacts` + `GET` — JSON descriptor mode for test ergonomics, not real multipart upload parity
 - `POST /api/systems/{id}/poams` + `GET`
 
 **Everything else** (dashboards, workflows, CMMC, baselines, milestones, ...) falls through to Prism, which returns spec-conformant example data. If you hit the harness without `PRISM_URL` set, unhandled paths return `501` with an explanatory message.
@@ -164,12 +164,19 @@ All above are also available via the inspector UI.
 | `EMASS_MOCK_PORT` | `8080` | Bind port |
 | `EMASS_MOCK_API_KEY` | `test-api-key` | Expected `api-key` header |
 | `EMASS_MOCK_REQUIRE_API_KEY` | `true` | `false` disables auth |
+| `EMASS_MOCK_REQUIRE_USER_UID_ON_ALL` | `true` | `false` disables `user-uid` enforcement on intercepted eMASS endpoints |
 | `EMASS_MOCK_SEED_SYSTEM_IDS` | `1,2,3` | Seed systems on startup |
 | `PRISM_URL` | *(unset)* | Prism base URL for fallthrough. `docker-compose.yml` sets this. |
 
 ## mTLS
 
 Real eMASS requires a DoD-issued client certificate. This harness does **not** enforce mTLS at the application layer — if you need to exercise cert-handling code, terminate TLS with a reverse proxy (nginx, Caddy, stunnel) in front of the harness and let it validate client certs. The harness does, however, enforce the EMU-style header pattern: both `api-key` and `user-uid` must be present on intercepted endpoints.
+
+For the auth/header behavior, this project treats [`deathlabs/emu`](https://github.com/deathlabs/emu) as a practical reference implementation for working eMASS client behavior in the field. `emass-mock` intentionally mirrors EMU's expectation of separate client cert + key handling plus both auth headers on requests, while still leaving TLS termination to external infrastructure in local test setups.
+
+## Artifact uploads
+
+The real eMASS artifacts endpoint is a multipart upload flow. This harness currently accepts JSON descriptors on `POST /api/systems/{id}/artifacts` so integration tests can exercise round-tripping and failure handling without assembling zip payloads. If you need full multipart/certificate-path parity, test that at your HTTP client layer or in a higher-fidelity environment.
 
 ## Relation to MITRE's work
 
