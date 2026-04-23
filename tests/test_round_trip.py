@@ -3,8 +3,34 @@
 
 def test_controls_put_then_get_returns_same_acronyms(client, headers):
     payload = [
-        {"acronym": "AC-2", "implementationStatus": "Planned"},
-        {"acronym": "SC-7", "implementationStatus": "Implemented"},
+        {
+            "acronym": "AC-2",
+            "responsibleEntities": "System Owner",
+            "controlDesignation": "System-Specific",
+            "estimatedCompletionDate": 1799644800,
+            "implementationNarrative": "AC-2 implementation narrative",
+            "implementationStatus": "Planned",
+            "slcmCriticality": "Moderate",
+            "slcmFrequency": "Quarterly",
+            "slcmMethod": "Manual",
+            "slcmReporting": "Tracked in Pretorin",
+            "slcmTracking": "Tracked in Pretorin",
+            "slcmComments": "Tracked in Pretorin",
+        },
+        {
+            "acronym": "SC-7",
+            "responsibleEntities": "System Owner",
+            "controlDesignation": "System-Specific",
+            "estimatedCompletionDate": 1799644800,
+            "implementationNarrative": "SC-7 implementation narrative",
+            "implementationStatus": "Implemented",
+            "slcmCriticality": "Moderate",
+            "slcmFrequency": "Quarterly",
+            "slcmMethod": "Manual",
+            "slcmReporting": "Tracked in Pretorin",
+            "slcmTracking": "Tracked in Pretorin",
+            "slcmComments": "Tracked in Pretorin",
+        },
     ]
     put = client.put("/api/systems/1/controls", json=payload, headers=headers)
     assert put.status_code == 200
@@ -32,7 +58,16 @@ def test_poam_assigns_ids_visible_on_readback(client, headers):
 def test_test_results_persist(client, headers):
     client.post(
         "/api/systems/1/test-results",
-        json=[{"cci": "CCI-000054", "testedBy": "auditor"}],
+        json=[
+            {
+                "cci": "CCI-000054",
+                "testedBy": "auditor",
+                "testDate": 1799644800,
+                "description": "Test result description",
+                "complianceStatus": "Compliant",
+                "assessmentProcedure": "SV-000054_rule",
+            }
+        ],
         headers=headers,
     )
     listed = client.get("/api/systems/1/test-results", headers=headers).json()["data"]

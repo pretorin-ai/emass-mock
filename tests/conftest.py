@@ -19,5 +19,5 @@ def client() -> TestClient:
 
 @pytest.fixture
 def headers() -> dict[str, str]:
-    # user-uid is read but not validated; send it anyway to match real clients.
+    # EMU sends both headers on all requests; the mock follows that pattern.
     return {"api-key": "test-api-key", "user-uid": "test-user"}

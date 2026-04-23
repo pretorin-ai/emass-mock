@@ -71,9 +71,9 @@ curl -H "api-key: test-api-key" -H "user-uid: me" http://localhost:8080/api/syst
 curl -X PUT http://localhost:8080/api/systems/1/controls \
      -H "api-key: test-api-key" -H "user-uid: me" \
      -H "content-type: application/json" \
-     -d '[{"acronym":"AC-2","implementationStatus":"Planned"}]'
+     -d '[{"acronym":"AC-2","responsibleEntities":"System Owner","controlDesignation":"System-Specific","estimatedCompletionDate":1799644800,"implementationNarrative":"AC-2 implementation narrative","implementationStatus":"Planned","slcmCriticality":"Moderate","slcmFrequency":"Quarterly","slcmMethod":"Manual","slcmReporting":"Tracked in Pretorin","slcmTracking":"Tracked in Pretorin","slcmComments":"Tracked in Pretorin"}]'
 
-curl -H "api-key: test-api-key" http://localhost:8080/api/systems/1/controls
+curl -H "api-key: test-api-key" -H "user-uid: me" http://localhost:8080/api/systems/1/controls
 # → {"meta":{"code":200},"data":[{"acronym":"AC-2",...}]}  — same data back
 ```
 
@@ -169,7 +169,7 @@ All above are also available via the inspector UI.
 
 ## mTLS
 
-Real eMASS requires a DoD-issued client certificate. This harness does **not** enforce mTLS at the application layer — if you need to exercise cert-handling code, terminate TLS with a reverse proxy (nginx, Caddy, stunnel) in front of the harness and let it validate client certs. Embedding cert validation would force every user to manage a CA, defeating the point of a frictionless dev tool.
+Real eMASS requires a DoD-issued client certificate. This harness does **not** enforce mTLS at the application layer — if you need to exercise cert-handling code, terminate TLS with a reverse proxy (nginx, Caddy, stunnel) in front of the harness and let it validate client certs. The harness does, however, enforce the EMU-style header pattern: both `api-key` and `user-uid` must be present on intercepted endpoints.
 
 ## Relation to MITRE's work
 

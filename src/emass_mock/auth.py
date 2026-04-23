@@ -1,13 +1,4 @@
-"""Auth: validates the `api-key` header per the MITRE eMASS OpenAPI spec.
-
-The spec also defines a `user-uid` header for write operations, but MITRE's
-public mock server accepts any value. We mirror that permissiveness: user-uid
-is read if present but not validated. Extend if you need strict checks.
-
-Real eMASS additionally requires a DoD-issued mTLS client certificate at the
-network boundary. mTLS is out of scope for this test harness — terminate TLS
-with a reverse proxy if your integration needs to exercise that code path.
-"""
+"""Auth helpers aligned to the working EMU client pattern."""
 
 from __future__ import annotations
 
@@ -17,7 +8,10 @@ from .config import load_settings
 from .envelope import error
 
 
-async def require_api_key(api_key: str | None = Header(default=None, alias="api-key")) -> None:
+async def require_emu_auth(
+    api_key: str | None = Header(default=None, alias="api-key"),
+    user_uid: str | None = Header(default=None, alias="user-uid"),
+) -> None:
     settings = load_settings()
     if not settings.require_api_key:
         return
@@ -26,6 +20,11 @@ async def require_api_key(api_key: str | None = Header(default=None, alias="api-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing api-key header",
+        )
+    if settings.require_user_uid_on_all and not user_uid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing user-uid header",
         )
 
 
