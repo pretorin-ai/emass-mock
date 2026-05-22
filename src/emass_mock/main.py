@@ -14,7 +14,15 @@ from fastapi.responses import Response
 
 from . import __version__
 from .config import load_settings
-from .handlers import artifacts, controls, poams, systems, test_results
+from .handlers import (
+    artifacts,
+    controls,
+    hardware_baseline,
+    poams,
+    software_baseline,
+    systems,
+    test_results,
+)
 from .middleware import FailureInjectionMiddleware
 from .proxy import proxy_to_prism
 from .routers import admin, ui
@@ -46,6 +54,8 @@ def create_app() -> FastAPI:
     app.include_router(test_results.router)
     app.include_router(artifacts.router)
     app.include_router(poams.router)
+    app.include_router(hardware_baseline.router)
+    app.include_router(software_baseline.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict:

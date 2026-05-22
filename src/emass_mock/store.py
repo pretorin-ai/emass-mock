@@ -23,12 +23,26 @@ class SystemRecord:
     test_results: list[dict[str, Any]] = field(default_factory=list)
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     poams: list[dict[str, Any]] = field(default_factory=list)
+    hardware: dict[str, dict[str, Any]] = field(default_factory=dict)
+    software: dict[str, dict[str, Any]] = field(default_factory=dict)
     _poam_counter: int = 0
+    _hw_counter: int = 0
+    _sw_counter: int = 0
 
     def next_poam_id(self) -> int:
         self._poam_counter += 1
         # Real eMASS poamIds are large; start at 1000 for readability.
         return 1000 + self._poam_counter
+
+    def next_hardware_id(self) -> str:
+        self._hw_counter += 1
+        # Real eMASS hardwareIds are GUIDs; this mock uses a deterministic
+        # sequence so tests can assert exact values.
+        return f"00000000-0000-4000-8000-{self._hw_counter:012d}"
+
+    def next_software_id(self) -> str:
+        self._sw_counter += 1
+        return f"11111111-1111-4111-8111-{self._sw_counter:012d}"
 
 
 class Store:
