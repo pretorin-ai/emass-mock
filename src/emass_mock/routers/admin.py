@@ -22,6 +22,8 @@ class FailureUpdate(BaseModel):
     global_status: int | None = None
     path_status: dict[str, int] = Field(default_factory=dict)
     control_status: dict[str, int] = Field(default_factory=dict)
+    artifact_filename_status: dict[str, int] = Field(default_factory=dict)
+    artifact_force_empty: bool = False
     latency_seconds: float = 0.0
 
 
@@ -62,6 +64,8 @@ async def set_failures(update: FailureUpdate) -> dict[str, Any]:
     f.global_status = update.global_status
     f.path_status = dict(update.path_status)
     f.control_status = {k.upper(): v for k, v in update.control_status.items()}
+    f.artifact_filename_status = dict(update.artifact_filename_status)
+    f.artifact_force_empty = update.artifact_force_empty
     f.latency_seconds = update.latency_seconds
     return {"status": "ok"}
 
