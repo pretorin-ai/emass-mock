@@ -90,7 +90,17 @@ def create_app() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def _malformed(request: Request, exc: RequestValidationError) -> JSONResponse:
         if request.url.path.startswith(_HARNESS_PREFIXES):
-            return JSONResponse(status_code=422, content={"detail": exc.errors()})
+            # Invalid form input can contain UploadFile objects, exceptions,
+            # or non-finite numbers that JSONResponse cannot serialize.
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": [
+                        {"loc": err["loc"], "msg": err["msg"], "type": err["type"]}
+                        for err in exc.errors()[:MAX_ERRORS]
+                    ]
+                },
+            )
         problems = "; ".join(
             "/".join(str(p) for p in err.get("loc", ())) + ": " + str(err.get("msg"))
             for err in exc.errors()[:MAX_ERRORS]

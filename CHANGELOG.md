@@ -67,6 +67,17 @@ was first written for.
 
 - `pyyaml`, `jsonschema`.
 
+### Fixed
+
+- Traffic captures enforce the 64 KB body limit even for a single large
+  chunk. Polling uses a completion cursor so concurrent requests are retained.
+- Nested POA&M updates keep duplicate milestone descriptions distinct and
+  preserve creation and review metadata on matched milestones.
+- Multipart uploads close all temporary files, including on rejected uploads.
+- Artifact downloads support Unicode and quoted filenames.
+- UI forms redirect only to this instance's UI and return validation errors
+  for invalid input instead of server errors.
+
 ## 0.1.0
 
 Initial release: stateful systems, controls, test results, artifacts and

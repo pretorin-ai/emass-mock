@@ -142,7 +142,7 @@ Everything lives under `/ui/` and works offline: no CDN, no build step. The page
 | **System** `/ui/systems/{id}` | Everything stored for a system: controls with their CCIs, test results, POA&Ms and milestones, artifacts (with downloads of the exact bytes received), HW/SW baselines, device-scan uploads. Add or remove assessment procedures. |
 | **Failures** `/ui/failures` | Global status, latency, empty artifact confirmations, and targeted rules per control, per exact path, or per artifact filename suffix. The nav shows how many rules are active. |
 
-The log keeps the last `EMASS_MOCK_TRAFFIC_LIMIT` requests (default 500) in memory, captures up to 64 KB of each body, masks `api-key`, and redacts `Authorization` and cookies. Every `/api` response carries an `x-emass-mock-request-id` header with the log entry's id. The JSON behind the pages is under `/_admin` (`/operations`, `/operations/{id}/example`, `/validate`, `/requests`, `/settings`) if you want to script against it.
+The log keeps the last `EMASS_MOCK_TRAFFIC_LIMIT` requests (default 500) in memory, captures up to 64 KB of each body, masks `api-key`, and redacts `Authorization` and cookies. Every `/api` response carries an `x-emass-mock-request-id` header with the log entry's id. To poll `GET /_admin/requests`, pass the previous response's `cursor` as `after`; cursors follow completion order so concurrent requests are not skipped. The JSON behind the pages is under `/_admin` (`/operations`, `/operations/{id}/example`, `/validate`, `/requests`, `/settings`) if you want to script against it.
 
 ## What the spec validation does
 

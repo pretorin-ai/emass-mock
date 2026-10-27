@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const state = { entries: [], lastId: 0, selected: null, timer: null };
+  const state = { entries: [], lastCursor: 0, selected: null, timer: null };
   const $ = (sel) => document.querySelector(sel);
   const HANDLED = { stateful: "mock", prism: "Prism", unhandled: "unhandled", injected: "injected" };
 
@@ -145,12 +145,12 @@
 
   async function poll() {
     try {
-      const resp = await fetch("/_admin/requests?after=" + state.lastId + "&limit=500");
+      const resp = await fetch("/_admin/requests?after=" + state.lastCursor + "&limit=500");
       if (resp.ok) {
         const data = await resp.json();
         if (data.entries.length) {
           for (const entry of data.entries) state.entries.unshift(entry);
-          state.lastId = data.entries[data.entries.length - 1].id;
+          state.lastCursor = data.cursor;
           if (state.entries.length > data.limit) state.entries.length = data.limit;
           render();
         }

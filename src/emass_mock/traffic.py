@@ -46,6 +46,7 @@ class Entry:
     query: str
     operation_id: str | None
     handled_by: str
+    cursor: int = 0
     status: int = 0
     duration_ms: float = 0.0
     auth: dict[str, Any] = field(default_factory=dict)
@@ -81,6 +82,7 @@ class TrafficLog:
     def __init__(self, limit: int) -> None:
         self._entries: deque[Entry] = deque(maxlen=limit)
         self._next_id = 1
+        self._next_cursor = 1
 
     @property
     def limit(self) -> int:
@@ -92,10 +94,14 @@ class TrafficLog:
         return value
 
     def add(self, entry: Entry) -> None:
+        # Request ids are reserved at arrival. Poll by completion order so a
+        # slow request cannot be skipped after a newer request finishes first.
+        entry.cursor = self._next_cursor
+        self._next_cursor += 1
         self._entries.append(entry)
 
     def list(self, after: int = 0, limit: int = 100) -> list[Entry]:
-        newer = [e for e in self._entries if e.id > after]
+        newer = [e for e in self._entries if e.cursor > after]
         return newer[-limit:]
 
     def get(self, entry_id: int) -> Entry | None:
@@ -210,9 +216,10 @@ class TrafficMiddleware:
             message = await receive()
             if message.get("type") == "http.request":
                 body = message.get("body", b"")
+                remaining = max(0, CAPTURE_LIMIT - request_size)
                 request_size += len(body)
-                if sum(len(c) for c in request_chunks) < CAPTURE_LIMIT:
-                    request_chunks.append(body)
+                if remaining:
+                    request_chunks.append(body[:remaining])
             return message
 
         async def capture_send(message: dict[str, Any]) -> None:
@@ -227,9 +234,10 @@ class TrafficMiddleware:
                 )
             elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
+                remaining = max(0, CAPTURE_LIMIT - response_size)
                 response_size += len(body)
-                if sum(len(c) for c in response_chunks) < CAPTURE_LIMIT:
-                    response_chunks.append(body)
+                if remaining:
+                    response_chunks.append(body[:remaining])
             await send(message)
 
         try:
@@ -293,7 +301,11 @@ class TrafficMiddleware:
             else:
                 entry.request_body = request_body[:2048].decode("utf-8", "replace")
 
-        if operation_id and isinstance(entry.request_body, (list, dict)) and not truncated:
+        if (
+            operation_id
+            and isinstance(entry.request_body, (list, dict))
+            and request_size == len(request_body)
+        ):
             entry.spec_errors = validate_request(operation_id, entry.request_body)
         if operation_id is None:
             entry.spec_errors = [f"{method} {path} is not an operation in the eMASS spec"]

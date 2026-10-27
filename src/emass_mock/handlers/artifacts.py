@@ -55,15 +55,15 @@ async def read_upload(request: Request) -> Upload | JSONResponse:
             "This endpoint takes multipart/form-data with a binary part named "
             f"{FILE_PART_NAMES[0]!r}; got {content_type or 'no content-type'}",
         )
-    form = await request.form()
-    part_name = next((n for n in FILE_PART_NAMES if isinstance(form.get(n), UploadFile)), None)
-    if part_name is None:
-        return error(400, f"multipart body is missing the binary part {FILE_PART_NAMES[0]!r}")
-    upload = form[part_name]
-    assert isinstance(upload, UploadFile)
-    content = await upload.read()
-    fields = {k: v for k, v in form.items() if k != part_name and not isinstance(v, UploadFile)}
-    return part_name, upload, content, fields
+    async with request.form() as form:
+        part_name = next((n for n in FILE_PART_NAMES if isinstance(form.get(n), UploadFile)), None)
+        if part_name is None:
+            return error(400, f"multipart body is missing the binary part {FILE_PART_NAMES[0]!r}")
+        upload = form[part_name]
+        assert isinstance(upload, UploadFile)
+        content = await upload.read()
+        fields = {k: v for k, v in form.items() if k != part_name and not isinstance(v, UploadFile)}
+        return part_name, upload, content, fields
 
 
 @router.post("/systems/{system_id}/artifacts")

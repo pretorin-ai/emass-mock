@@ -19,6 +19,7 @@ Pass ``systemOnly=false`` to read control-level items back.
 from __future__ import annotations
 
 import time
+from collections import defaultdict, deque
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -38,14 +39,12 @@ OPERATION_GET_ONE = "getSystemPoamsByPoamId"
 router = APIRouter(prefix="/api", tags=["poams"], dependencies=[Depends(require_emu_auth)])
 
 
-def new_milestone(
-    record: SystemRecord, poam_id: int, body: dict[str, Any], milestone_id: int | None = None
-) -> dict[str, Any]:
+def new_milestone(record: SystemRecord, poam_id: int, body: dict[str, Any]) -> dict[str, Any]:
     """A stored milestone in ``MilestonesGet`` shape."""
     return {
         "systemId": record.system_id,
         "poamId": poam_id,
-        "milestoneId": milestone_id or record.next_milestone_id(),
+        "milestoneId": record.next_milestone_id(),
         "description": body["description"],
         "scheduledCompletionDate": body["scheduledCompletionDate"],
         "reviewStatus": "Not Approved",
@@ -112,11 +111,19 @@ async def update_poams(system_id: int, payload: Any = JSON_BODY):
             data.append(row)
             continue
         if "milestones" in poam:
-            by_description = {m["description"]: m["milestoneId"] for m in target["milestones"]}
-            target["milestones"] = [
-                new_milestone(record, poam_id, m, by_description.get(m["description"]))
-                for m in poam["milestones"] or []
-            ]
+            by_description: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+            for milestone in target["milestones"]:
+                by_description[milestone["description"]].append(milestone)
+            updated = []
+            for body in poam["milestones"] or []:
+                matches = by_description[body["description"]]
+                if matches:
+                    milestone = matches.popleft()
+                    milestone["scheduledCompletionDate"] = body["scheduledCompletionDate"]
+                else:
+                    milestone = new_milestone(record, poam_id, body)
+                updated.append(milestone)
+            target["milestones"] = updated
         for key, value in poam.items():
             if key not in {"poamId", "displayPoamId", "systemId", "milestones"}:
                 target[key] = value

@@ -10,6 +10,11 @@ from __future__ import annotations
 import base64
 import json
 
+import pytest
+from starlette.datastructures import UploadFile
+
+from emass_mock.spec import query_enum
+
 
 def test_multipart_upload_records_file_bytes(client, headers, read_headers, conforms):
     body = json.dumps({"hello": "world"}).encode("utf-8")
@@ -106,3 +111,31 @@ def test_multipart_unknown_system_404(client, headers):
         headers=headers,
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("resource", ["artifacts", "device-scan-results"])
+@pytest.mark.parametrize("part_name", ["filename", "file", "wrong-part"])
+def test_upload_closes_all_multipart_files(client, headers, monkeypatch, resource, part_name):
+    closed = []
+    original_close = UploadFile.close
+
+    async def track_close(upload):
+        await original_close(upload)
+        closed.append(upload)
+
+    monkeypatch.setattr(UploadFile, "close", track_close)
+    params = {}
+    if resource == "device-scan-results":
+        params["scanType"] = query_enum("addScanResultsBySystemId", "scanType")[0]
+    response = client.post(
+        f"/api/systems/1/{resource}",
+        params=params,
+        files={
+            part_name: ("scan.xml", b"x" * (1024 * 1024 + 1), "application/xml"),
+            "extra-file": ("extra.txt", b"extra", "text/plain"),
+        },
+        headers=headers,
+    )
+    assert response.status_code == (400 if part_name == "wrong-part" else 200)
+    assert len(closed) == 2
+    assert all(upload.file.closed for upload in closed)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -219,7 +220,11 @@ async def list_requests(
 ) -> dict[str, Any]:
     log = get_traffic()
     entries = log.list(after=after, limit=limit)
-    return {"entries": [e.summary() for e in entries], "limit": log.limit}
+    return {
+        "entries": [e.summary() for e in entries],
+        "limit": log.limit,
+        "cursor": entries[-1].cursor if entries else after,
+    }
 
 
 @router.get("/requests/{entry_id}")
@@ -244,9 +249,15 @@ async def artifact_content(system_id: int, index: int) -> Response:
         raise HTTPException(status_code=404, detail=f"Artifact {index} not found")
     art = artifacts[index]
     content = base64.b64decode(art.get("_content_b64", ""))
-    filename = (art.get("filename") or f"artifact-{index}").replace('"', "")
+    filename = art.get("filename") or f"artifact-{index}"
+    quoted_filename = quote(filename, safe="")
+    disposition = (
+        f"attachment; filename*=utf-8''{quoted_filename}"
+        if quoted_filename != filename
+        else f'attachment; filename="{filename}"'
+    )
     return Response(
         content=content,
         media_type=art.get("mimeContentType") or "application/octet-stream",
-        headers={"content-disposition": f'attachment; filename="{filename}"'},
+        headers={"content-disposition": disposition},
     )

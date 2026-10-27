@@ -1,5 +1,6 @@
 """POA&M PUT/DELETE/GET-by-id and the milestones sub-resource."""
 
+from emass_mock.store import get_store
 from tests.payloads import poam_row
 
 
@@ -138,3 +139,48 @@ def test_milestones_on_unknown_poam_is_404(client, headers):
     resp = client.get("/api/systems/1/poams/777/milestones", headers=headers)
     assert resp.status_code == 404
     assert resp.json()["meta"]["code"] == 404
+
+
+def test_nested_update_keeps_duplicate_milestones_distinct(client, headers, conforms):
+    poam_id = _create(
+        client,
+        headers,
+        milestones=[
+            {"description": "Patch", "scheduledCompletionDate": 1},
+            {"description": "Patch", "scheduledCompletionDate": 2},
+        ],
+    )
+    stored = get_store().get_system(1).find_poam(poam_id)
+    original_ids = [m["milestoneId"] for m in stored["milestones"]]
+    stored["milestones"][0].update(createdDate=42, createdBy="Auditor", reviewStatus="Approved")
+    response = client.put(
+        "/api/systems/1/poams",
+        json=[
+            poam_row(
+                poamId=poam_id,
+                displayPoamId=100_000_000 + poam_id,
+                milestones=[
+                    {"description": "Patch", "scheduledCompletionDate": i, "isActive": True}
+                    for i in (3, 4, 5)
+                ],
+            )
+        ],
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    base = f"/api/systems/1/poams/{poam_id}/milestones"
+    response = client.get(base, headers=headers)
+    conforms("getSystemMilestonesByPoamId", response.json())
+    milestones = response.json()["data"]
+    ids = [m["milestoneId"] for m in milestones]
+    assert ids[:2] == original_ids
+    assert len(set(ids)) == 3
+    assert [m["scheduledCompletionDate"] for m in milestones] == [3, 4, 5]
+    assert milestones[0]["createdDate"] == 42
+    assert milestones[0]["createdBy"] == "Auditor"
+    assert milestones[0]["reviewStatus"] == "Approved"
+    client.request("DELETE", base, json=[{"milestoneId": ids[1]}], headers=headers)
+    assert [m["milestoneId"] for m in client.get(base, headers=headers).json()["data"]] == [
+        ids[0],
+        ids[2],
+    ]

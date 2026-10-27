@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -78,10 +79,17 @@ def _counts(record: SystemRecord) -> dict[str, int]:
 
 
 def _back(request: Request, fallback: str) -> RedirectResponse:
-    target = request.headers.get("referer") or fallback
     # Only follow same-site referers back into the UI.
-    if "/ui/" not in target:
-        target = fallback
+    target = fallback
+    try:
+        referer = urlsplit(urljoin(str(request.url), request.headers.get("referer") or fallback))
+        origin = urlsplit(str(request.base_url))
+        if (referer.scheme, referer.netloc) == (origin.scheme, origin.netloc) and (
+            referer.path == "/ui" or referer.path.startswith("/ui/")
+        ):
+            target = urlunsplit(("", "", referer.path, referer.query, referer.fragment))
+    except ValueError:
+        pass
     return RedirectResponse(url=target, status_code=303)
 
 
@@ -126,16 +134,13 @@ async def system_detail(request: Request, system_id: int) -> HTMLResponse:
 @router.post("/failures/global")
 async def update_global_failures(
     request: Request,
-    global_status: str = Form(default=""),
-    latency_seconds: str = Form(default="0"),
+    global_status: int | None = Form(default=None),
+    latency_seconds: float = Form(default=0.0, ge=0, allow_inf_nan=False),
     artifact_force_empty: str = Form(default=""),
 ) -> RedirectResponse:
     f = get_failures()
-    f.global_status = int(global_status) if global_status.strip() else None
-    try:
-        f.latency_seconds = max(0.0, float(latency_seconds or 0))
-    except ValueError:
-        f.latency_seconds = 0.0
+    f.global_status = global_status
+    f.latency_seconds = latency_seconds
     f.artifact_force_empty = artifact_force_empty == "on"
     return _back(request, "/ui/failures")
 

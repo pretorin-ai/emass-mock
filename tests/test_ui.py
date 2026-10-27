@@ -1,6 +1,7 @@
 """Testing UI: pages render, forms change state, and the request log records traffic."""
 
 import base64
+from urllib.parse import quote
 
 import pytest
 
@@ -259,3 +260,82 @@ def test_artifact_download_returns_uploaded_bytes(client, headers):
     stored = client.get("/_admin/systems/1/artifacts").json()[0]
     assert base64.b64decode(stored["_content_b64"]) == resp.content
     assert client.get("/_admin/systems/1/artifacts/5/content").status_code == 404
+
+
+@pytest.mark.parametrize("filename", ["检查.pdf", "résumé.pdf", "report; final.pdf"])
+def test_artifact_download_encodes_filename(client, headers, filename):
+    uploaded = client.post(
+        "/api/systems/1/artifacts",
+        files={"filename": (filename, b"file bytes", "application/pdf")},
+        headers=headers,
+    )
+    assert uploaded.status_code == 200
+    response = client.get("/_admin/systems/1/artifacts/0/content")
+    assert response.status_code == 200
+    assert response.content == b"file bytes"
+    assert response.headers["content-disposition"] == (
+        "attachment; filename*=utf-8''" + quote(filename, safe="")
+    )
+
+
+@pytest.mark.parametrize(
+    ("referer", "expected"),
+    [
+        ("http://testserver/ui/traffic?filter=all", "/ui/traffic?filter=all"),
+        ("/ui/systems/1", "/ui/systems/1"),
+        ("https://example.com/ui/", "/ui/"),
+        ("//example.com/ui/", "/ui/"),
+        ("http://testserver/other?next=/ui/", "/ui/"),
+        ("http://[invalid/ui/", "/ui/"),
+    ],
+)
+def test_ui_form_redirect_stays_on_this_ui(client, referer, expected):
+    response = client.post("/ui/reset", headers={"referer": referer}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == expected
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"global_status": "invalid"},
+        {"latency_seconds": "invalid"},
+        {"latency_seconds": "inf"},
+        {"latency_seconds": "-1"},
+    ],
+)
+def test_invalid_failure_form_returns_validation_error_without_mutating_state(client, data):
+    get_failures().global_status = 503
+    response = client.post("/ui/failures/global", data=data)
+    assert response.status_code == 422
+    assert response.json()["detail"]
+    assert get_failures().global_status == 503
+
+
+def test_file_in_numeric_form_field_returns_validation_error(client):
+    response = client.post(
+        "/ui/failures/rule",
+        data={"kind": "path", "key": "/api/systems"},
+        files={"status": ("status.txt", b"503", "text/plain")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "status"]
+    assert get_failures().path_status == {}
+
+
+def test_nonfinite_number_in_admin_input_returns_validation_error(client):
+    response = client.post(
+        "/_admin/failures",
+        content=b'{"global_status":NaN}',
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "global_status"]
+
+
+def test_empty_failure_form_clears_global_settings(client):
+    get_failures().global_status = 503
+    response = client.post("/ui/failures/global", data={"global_status": "", "latency_seconds": ""})
+    assert response.status_code == 200
+    assert get_failures().global_status is None
+    assert get_failures().latency_seconds == 0.0
