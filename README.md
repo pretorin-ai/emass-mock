@@ -24,6 +24,7 @@ This harness sits in front of Prism and intercepts the endpoints that need state
 | **2. Orchestrated failure injection** | Per-control failures inside a batch. Global 5xx. Per-file artifact rejection. Latency. Recoverable between tests. | No |
 | **3. Spec enforcement with state** | Request bodies validated against the vendored OpenAPI operation; responses shaped to the spec; a 400 names the operation and the fields. | Partly |
 | **4. Pytest harness starter kit** | Drop-in fixtures + reference tests. Clone, adapt, done. | No |
+| **5. Testing UI** | Send any spec operation from the browser, watch a real client's traffic live, inspect stored data, toggle failures. | No |
 | **(Inherited)** Spec-conformant example responses for dashboards, workflows, CMMC, etc. | Yes, via Prism proxy |
 
 ## Architecture
@@ -94,7 +95,7 @@ curl -X PUT http://localhost:8080/api/systems/1/controls \
 # → {"meta":{"code":400,"errorMessage":"Request body does not match updateControlBySystemId in eMASS API v3.22: 0: 'responsibleEntities' is a required property; ..."}}
 ```
 
-Open http://localhost:8080/ui/ for the inspector, http://localhost:8080/docs for OpenAPI of the harness's own surface.
+Open http://localhost:8080/ui/ for the testing UI (below), http://localhost:8080/docs for OpenAPI of the harness's own surface.
 
 ## Using it as a test harness (the main path)
 
@@ -128,6 +129,20 @@ def test_partial_batch_is_handled(emass):
     assert rows["SC-7"]["success"] is False
     assert rows["SC-7"]["errors"] == ["acronym: injected failure (422) for SC-7"]
 ```
+
+## Testing UI
+
+Everything lives under `/ui/` and works offline: no CDN, no build step. The pages talk to the same `/api` endpoints your client does, so anything you do in the UI shows up in the traffic log like any other request.
+
+| Page | What it is for |
+|------|----------------|
+| **Dashboard** `/ui/` | Spec version, auth and validation settings, per-system counts, the last ten requests, reset. |
+| **Console** `/ui/console` | Pick any of the spec's operations (stateful ones by default, or all 104), fill in path and query parameters (enums become dropdowns), set `api-key` / `user-uid`, and send. JSON bodies start from the spec's own examples ("Required fields" or "Full example"); **Validate** checks a body against the spec without sending it. Multipart operations take a file and let you choose the part name (`filename` per the spec, or `file` as emu sends). The response panel shows status, `meta.errorMessage`, a per-row success summary, and a link to the request in the traffic log. **Copy as curl** reproduces the request. Deep-link with `?op=<operationId>&systemId=<id>`. |
+| **Traffic** `/ui/traffic` | A live log of every `/api` request the mock received, newest first. Each entry shows the spec operation it maps to (or *not in spec*), who handled it (the mock, Prism, unhandled 501, or an injected failure), auth status, the request body or multipart part list, spec problems in the request, and the response. Filter by path, status, handler, or "only spec problems". Point your real client at the mock and watch this page. |
+| **System** `/ui/systems/{id}` | Everything stored for a system: controls with their CCIs, test results, POA&Ms and milestones, artifacts (with downloads of the exact bytes received), HW/SW baselines, device-scan uploads. Add or remove assessment procedures. |
+| **Failures** `/ui/failures` | Global status, latency, empty artifact confirmations, and targeted rules per control, per exact path, or per artifact filename suffix. The nav shows how many rules are active. |
+
+The log keeps the last `EMASS_MOCK_TRAFFIC_LIMIT` requests (default 500) in memory, captures up to 64 KB of each body, masks `api-key`, and redacts `Authorization` and cookies. Every `/api` response carries an `x-emass-mock-request-id` header with the log entry's id. The JSON behind the pages is under `/_admin` (`/operations`, `/operations/{id}/example`, `/validate`, `/requests`, `/settings`) if you want to script against it.
 
 ## What the spec validation does
 
@@ -185,7 +200,7 @@ curl -X POST http://localhost:8080/_admin/failures \
 curl -X POST http://localhost:8080/_admin/reset
 ```
 
-Other admin routes: `GET /_admin/state`, `GET/POST /_admin/systems/{id}/assessment-procedures`, `GET /_admin/systems/{id}/artifacts` (uploaded bytes as `_content_b64`, plus `_part_name`), `GET /_admin/systems/{id}/device-scans`.
+Other admin routes: `GET /_admin/state`, `GET /_admin/failures`, `GET/DELETE /_admin/requests`, `GET /_admin/requests/{id}`, `GET/POST /_admin/systems/{id}/assessment-procedures`, `GET /_admin/systems/{id}/artifacts` (uploaded bytes as `_content_b64`, plus `_part_name`), `GET /_admin/systems/{id}/artifacts/{n}/content` (the raw file), `GET /_admin/systems/{id}/device-scans`.
 
 ## What's stateful, what proxies to Prism
 
@@ -216,6 +231,7 @@ Other admin routes: `GET /_admin/state`, `GET/POST /_admin/systems/{id}/assessme
 | `EMASS_MOCK_SEED_SYSTEM_IDS` | `1,2,3` | Seed systems on startup |
 | `EMASS_MOCK_SEED_ASSESSMENT_PROCEDURES` | built-in synthetic set | `AP=CCI,...` pairs seeded on every system |
 | `EMASS_MOCK_SPEC_PATH` | packaged copy | Path to an alternative `eMASSRestOpenApi.yaml` |
+| `EMASS_MOCK_TRAFFIC_LIMIT` | `500` | Requests kept in the traffic log |
 | `PRISM_URL` | *(unset)* | Prism base URL for fallthrough. `docker-compose.yml` sets this. |
 
 ## Auth and mTLS

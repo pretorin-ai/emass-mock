@@ -50,7 +50,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-emass_mock = ["templates/*.html", "spec/*.yaml"]
+emass_mock = ["templates/*.html", "spec/*.yaml", "static/*"]
 
 [tool.ruff]
 line-length = 100

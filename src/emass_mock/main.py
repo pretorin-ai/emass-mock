@@ -14,9 +14,12 @@ the eMASS surface.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
@@ -39,6 +42,20 @@ from .proxy import proxy_to_prism
 from .routers import admin, ui
 from .spec import MAX_ERRORS, spec_version
 from .store import get_store
+from .traffic import TrafficMiddleware
+
+EMASS_ROUTERS = (
+    test_connection.router,
+    systems.router,
+    controls.router,
+    test_results.router,
+    artifacts.router,
+    poams.router,
+    milestones.router,
+    baselines.hardware_router,
+    baselines.software_router,
+    device_scan_results.router,
+)
 
 _HARNESS_PREFIXES = ("/_admin", "/ui", "/docs", "/redoc", "/openapi.json", "/health")
 
@@ -58,6 +75,13 @@ def create_app() -> FastAPI:
         ),
     )
     app.add_middleware(FailureInjectionMiddleware)
+    # Added last so it is outermost: it records injected failures too.
+    app.add_middleware(TrafficMiddleware)
+    app.mount(
+        "/ui/static",
+        StaticFiles(directory=str(Path(__file__).parent / "static")),
+        name="ui-static",
+    )
 
     @app.exception_handler(AuthError)
     async def _auth_error(request: Request, exc: AuthError) -> JSONResponse:
@@ -83,17 +107,11 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(ui.router)
 
-    # Stateful eMASS handlers (the harness's value-add).
-    app.include_router(test_connection.router)
-    app.include_router(systems.router)
-    app.include_router(controls.router)
-    app.include_router(test_results.router)
-    app.include_router(artifacts.router)
-    app.include_router(poams.router)
-    app.include_router(milestones.router)
-    app.include_router(baselines.hardware_router)
-    app.include_router(baselines.software_router)
-    app.include_router(device_scan_results.router)
+    # Stateful eMASS handlers (the harness's value-add). Kept on app.state so
+    # the UI can tell which spec operations the mock answers itself.
+    app.state.emass_routers = EMASS_ROUTERS
+    for emass_router in EMASS_ROUTERS:
+        app.include_router(emass_router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict:

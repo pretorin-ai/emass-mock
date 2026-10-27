@@ -9,6 +9,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .envelope import error
 from .failures import get_failures, maybe_sleep
 
+_BYPASS_PREFIXES = ("/_admin", "/ui", "/docs", "/redoc", "/openapi.json")
+
 
 class FailureInjectionMiddleware(BaseHTTPMiddleware):
     """Short-circuits matching requests with a configured error status."""
@@ -16,7 +18,7 @@ class FailureInjectionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         # Admin + UI routes bypass failure injection so operators can always recover.
         path = request.url.path
-        if path.startswith("/_admin") or path.startswith("/ui") or path == "/health":
+        if path.startswith(_BYPASS_PREFIXES) or path == "/health":
             return await call_next(request)
 
         await maybe_sleep()

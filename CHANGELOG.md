@@ -35,6 +35,21 @@ was first written for.
 
 ### Added
 
+- **Testing UI** under `/ui/`, self-contained (no CDN):
+  - *Console*: send any spec operation with parameters, headers, and a body
+    generated from the spec's examples; validate without sending; multipart
+    uploads with a choice of part name; per-row result summary; copy as curl.
+  - *Traffic*: live log of every `/api` request with the matched spec
+    operation, handler (mock, Prism, unhandled, injected), auth status,
+    request body or multipart parts, spec problems, and response.
+  - *System* pages for every stored resource, artifact downloads, and
+    assessment-procedure editing; a *Failures* page for every rule type.
+- Request log middleware (`traffic.py`) and `x-emass-mock-request-id` on
+  every `/api` response; `EMASS_MOCK_TRAFFIC_LIMIT` (default 500).
+- Admin JSON for the UI: `/_admin/operations`, `/operations/{id}/example`,
+  `/validate`, `/requests`, `/settings`, `/failures` (GET), artifact content.
+- Example bodies generated from the spec, coerced to each field's declared
+  type (several MITRE examples are unquoted YAML numbers on string fields).
 - `GET /api` (`testConnection`).
 - `PUT` and `DELETE /api/systems/{id}/poams`, `GET /poams/{poamId}`.
 - Milestones: `GET`, `POST`, `PUT`, `DELETE /poams/{poamId}/milestones` and

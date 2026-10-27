@@ -1,33 +1,168 @@
 {% extends "base.html" %}
-{% block title %}System {{ system.system_id }} — emass-mock{% endblock %}
+{% block title %}System {{ system.system_id }} · emass-mock{% endblock %}
 {% block content %}
-<h2>System {{ system.system_id }} <small>({{ system.acronym }})</small></h2>
-<p><a href="/ui/">← back to systems</a></p>
+<p class="small"><a href="/ui/">Dashboard</a> / System {{ system.system_id }}</p>
+<div class="row" style="justify-content: space-between; margin-bottom: 1rem;">
+    <h1 style="margin:0">System {{ system.system_id }} <span class="muted">· {{ system.acronym }}</span></h1>
+    <a class="button" href="/ui/console?systemId={{ system.system_id }}">Send a request to this system</a>
+</div>
 
-<h3>Controls ({{ system.controls|length }})</h3>
-{% if system.controls %}
-<table>
-    <thead><tr><th>Acronym</th><th>Payload</th></tr></thead>
-    <tbody>
-    {% for acronym, ctrl in system.controls.items() %}
-        <tr><td><code>{{ acronym }}</code></td><td><pre>{{ ctrl|tojson(indent=2) }}</pre></td></tr>
-    {% endfor %}
-    </tbody>
-</table>
-{% else %}<p><em>No controls pushed yet.</em></p>{% endif %}
+<div class="card">
+    <h2>Controls <span class="pill">{{ counts.controls }}</span></h2>
+    {% if system.controls %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Acronym</th><th>Implementation status</th><th>Designation</th><th>Responsible</th><th>CCIs</th><th></th></tr></thead>
+        <tbody>
+        {% for acronym, ctrl in system.controls.items() %}
+            <tr>
+                <td><code>{{ acronym }}</code></td>
+                <td>{{ ctrl.implementationStatus or "—" }}</td>
+                <td>{{ ctrl.controlDesignation }}</td>
+                <td>{{ ctrl.responsibleEntities }}</td>
+                <td class="mono small">{{ system.ccis_for_control(acronym)|join(", ") or "—" }}</td>
+                <td><details><summary>JSON</summary><pre>{{ ctrl|tojson(indent=2) }}</pre></details></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}<p class="empty">No controls pushed yet.</p>{% endif %}
+</div>
 
-<h3>Test Results ({{ system.test_results|length }})</h3>
-{% if system.test_results %}
-<pre>{{ system.test_results|tojson(indent=2) }}</pre>
-{% else %}<p><em>None.</em></p>{% endif %}
+<div class="card">
+    <h2>Test results <span class="pill">{{ counts.test_results }}</span></h2>
+    {% if system.test_results %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Procedure</th><th>CCI</th><th>Status</th><th>Tested by</th><th>Test date</th><th>Description</th></tr></thead>
+        <tbody>
+        {% for tr in system.test_results %}
+            <tr>
+                <td><code>{{ tr.assessmentProcedure }}</code></td>
+                <td class="mono">{{ tr.cci }}</td>
+                <td><span class="pill {{ 'ok' if tr.complianceStatus == 'Compliant' else ('bad' if tr.complianceStatus == 'Non-Compliant' else '') }}">{{ tr.complianceStatus }}</span></td>
+                <td>{{ tr.testedBy }}</td>
+                <td class="mono small">{{ tr.testDate }}</td>
+                <td>{{ tr.description }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}<p class="empty">No test results yet.</p>{% endif %}
+</div>
 
-<h3>Artifacts ({{ system.artifacts|length }})</h3>
-{% if system.artifacts %}
-<pre>{{ system.artifacts|tojson(indent=2) }}</pre>
-{% else %}<p><em>None.</em></p>{% endif %}
+<div class="card">
+    <h2>POA&amp;Ms <span class="pill">{{ counts.poams }}</span> <span class="pill">{{ counts.milestones }} milestones</span></h2>
+    {% if system.poams %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>poamId</th><th>Status</th><th>Control</th><th>Vulnerability</th><th>externalUid</th><th>Milestones</th><th></th></tr></thead>
+        <tbody>
+        {% for p in system.poams %}
+            <tr>
+                <td class="mono">{{ p.poamId }}<div class="muted small">display {{ p.displayPoamId }}</div></td>
+                <td>{{ p.status }}</td>
+                <td>{{ p.controlAcronym or "system-level" }}</td>
+                <td>{{ p.vulnerabilityDescription }}</td>
+                <td class="mono small">{{ p.externalUid or "—" }}</td>
+                <td>
+                    {% for m in p.milestones %}<div class="small"><span class="mono">{{ m.milestoneId }}</span> {{ m.description }}</div>{% else %}<span class="muted">none</span>{% endfor %}
+                </td>
+                <td><details><summary>JSON</summary><pre>{{ p|tojson(indent=2) }}</pre></details></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}<p class="empty">No POA&amp;Ms yet.</p>{% endif %}
+</div>
 
-<h3>POA&amp;Ms ({{ system.poams|length }})</h3>
-{% if system.poams %}
-<pre>{{ system.poams|tojson(indent=2) }}</pre>
-{% else %}<p><em>None.</em></p>{% endif %}
+<div class="card">
+    <h2>Artifacts <span class="pill">{{ counts.artifacts }}</span></h2>
+    {% if system.artifacts %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Filename</th><th>Type</th><th>Category</th><th class="num">Bytes</th><th>Part name</th><th></th></tr></thead>
+        <tbody>
+        {% for a in system.artifacts %}
+            <tr>
+                <td class="mono">{{ a.filename }}{% if a._is_bulk %} <span class="pill info">bulk</span>{% endif %}</td>
+                <td>{{ a.type }}</td>
+                <td>{{ a.category }}</td>
+                <td class="num">{{ a.fileSize }}</td>
+                <td><code>{{ a._part_name }}</code>{% if a._part_name != "filename" %} <span class="pill warn" title="The spec names this part 'filename'; emu sends 'file'">not spec</span>{% endif %}</td>
+                <td><a href="/_admin/systems/{{ system.system_id }}/artifacts/{{ loop.index0 }}/content">Download</a></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}<p class="empty">No artifacts uploaded yet.</p>{% endif %}
+</div>
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2>Hardware baseline <span class="pill">{{ counts.hardware }}</span></h2>
+        {% if system.hardware %}
+        <div class="table-wrap"><table>
+            <thead><tr><th>Asset</th><th>Type</th><th>hardwareId</th></tr></thead>
+            <tbody>
+            {% for hid, hw in system.hardware.items() %}
+                <tr><td>{{ hw.assetName }}</td><td>{{ hw.componentType or "—" }}</td><td class="mono small">{{ hid }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        {% else %}<p class="empty">No hardware yet.</p>{% endif %}
+    </div>
+    <div class="card">
+        <h2>Software baseline <span class="pill">{{ counts.software }}</span></h2>
+        {% if system.software %}
+        <div class="table-wrap"><table>
+            <thead><tr><th>Software</th><th>Version</th><th>softwareId</th></tr></thead>
+            <tbody>
+            {% for sid, sw in system.software.items() %}
+                <tr><td>{{ sw.softwareVendor }} {{ sw.softwareName }}</td><td>{{ sw.version }}</td><td class="mono small">{{ sid }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        {% else %}<p class="empty">No software yet.</p>{% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Device scan uploads <span class="pill">{{ counts.device_scans }}</span></h2>
+    {% if system.device_scans %}
+    <div class="table-wrap"><table>
+        <thead><tr><th>Filename</th><th>scanType</th><th>Baseline</th><th class="num">Bytes</th><th>Part name</th></tr></thead>
+        <tbody>
+        {% for s in system.device_scans %}
+            <tr><td class="mono">{{ s.filename }}</td><td><code>{{ s.scanType }}</code></td><td>{{ "yes" if s.isBaseline else "no" }}</td><td class="num">{{ s.size }}</td><td><code>{{ s._part_name }}</code></td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}<p class="empty">No scans uploaded yet.</p>{% endif %}
+</div>
+
+<div class="card">
+    <h2>Assessment procedures <span class="pill">{{ counts.procedures }}</span></h2>
+    <p class="muted">Test results are keyed by assessment procedure. A POST for a procedure not listed here fails that row. The default set is synthetic, not DISA's table.</p>
+    <form action="/ui/systems/{{ system.system_id }}/assessment-procedures" method="post" class="row" style="margin-bottom:0.75rem">
+        <div class="grow"><label for="ap">Procedure</label><input id="ap" type="text" name="procedure" placeholder="SC-8.1" required /></div>
+        <div class="grow"><label for="cci">CCI</label><input id="cci" type="text" name="cci" placeholder="002418" required /></div>
+        <div style="align-self:flex-end"><button type="submit" class="primary">Add or update</button></div>
+    </form>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Procedure</th><th>CCI</th><th></th></tr></thead>
+        <tbody>
+        {% for ap, cci in system.assessment_procedures|dictsort %}
+            <tr>
+                <td><code>{{ ap }}</code></td>
+                <td class="mono">{{ cci }}</td>
+                <td class="num">
+                    <form action="/ui/systems/{{ system.system_id }}/assessment-procedures/delete" method="post" style="display:inline">
+                        <input type="hidden" name="procedure" value="{{ ap }}" />
+                        <button type="submit" class="small danger">Remove</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="3" class="empty">No procedures. Every test-result POST will fail.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+</div>
 {% endblock %}

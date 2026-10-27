@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 from collections.abc import Iterable
 from functools import cache, lru_cache
 from importlib import resources
@@ -150,13 +151,13 @@ def _merge_all_of(node: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def _to_jsonschema(node: Any) -> Any:
+def _to_jsonschema(node: Any, drop: frozenset[str] = _DROP_KEYS) -> Any:
     if isinstance(node, list):
-        return [_to_jsonschema(value) for value in node]
+        return [_to_jsonschema(value, drop) for value in node]
     if not isinstance(node, dict):
         return node
 
-    node = {key: value for key, value in node.items() if key not in _DROP_KEYS}
+    node = {key: value for key, value in node.items() if key not in drop}
     if "allOf" in node:
         node = _merge_all_of(node)
 
@@ -182,11 +183,11 @@ def _to_jsonschema(node: Any) -> Any:
     out: dict[str, Any] = {}
     for key, value in node.items():
         if key == "properties":
-            out[key] = {name: _to_jsonschema(schema) for name, schema in value.items()}
+            out[key] = {name: _to_jsonschema(schema, drop) for name, schema in value.items()}
         elif key in {"items", "additionalProperties", "not"} and isinstance(value, dict):
-            out[key] = _to_jsonschema(value)
+            out[key] = _to_jsonschema(value, drop)
         elif key in {"allOf", "anyOf", "oneOf"}:
-            out[key] = [_to_jsonschema(branch) for branch in value]
+            out[key] = [_to_jsonschema(branch, drop) for branch in value]
         else:
             out[key] = value
 
@@ -348,3 +349,197 @@ def format_errors(errors: Iterable[ValidationError]) -> list[str]:
         if len(messages) >= MAX_ERRORS:
             break
     return messages
+
+
+# ---------------------------------------------------------------------------
+# Catalog, path matching, and example bodies (used by the testing UI)
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_PARAM = re.compile(r"\{[^}]+\}")
+# Keep what the example generator reads; drop only noise.
+_EXAMPLE_DROP = frozenset({"x-faker", "title", "xml"})
+
+
+def normalize_path_template(path: str) -> str:
+    """Collapse path parameters: ``/api/systems/{systemId}`` becomes ``/api/systems/{}``."""
+    return _TEMPLATE_PARAM.sub("{}", path)
+
+
+@lru_cache(maxsize=1)
+def _path_matchers() -> list[tuple[re.Pattern[str], str]]:
+    matchers = []
+    for path in load_spec()["paths"]:
+        segments = [
+            "[^/]+" if part.startswith("{") else re.escape(part) for part in path.split("/")
+        ]
+        literal = sum(1 for part in path.split("/") if part and not part.startswith("{"))
+        matchers.append((re.compile("^" + "/".join(segments) + "/?$"), path, literal))
+    # Prefer the most literal template when two could match the same request.
+    matchers.sort(key=lambda item: -item[2])
+    return [(regex, path) for regex, path, _ in matchers]
+
+
+def match_operation(method: str, path: str) -> str | None:
+    """The spec ``operationId`` a concrete request maps to, or ``None`` if there is none."""
+    method = method.lower()
+    spec_paths = load_spec()["paths"]
+    for regex, template in _path_matchers():
+        if regex.match(path):
+            op = spec_paths[template].get(method)
+            if isinstance(op, dict):
+                return op.get("operationId")
+            return None
+    return None
+
+
+def _first_line(text: Any, limit: int = 240) -> str:
+    if not isinstance(text, str):
+        return ""
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    cleaned = re.sub(r"[*`#]", "", cleaned)
+    line = next((ln.strip() for ln in cleaned.splitlines() if ln.strip()), "")
+    return line[:limit]
+
+
+def _param_summary(param: dict[str, Any]) -> dict[str, Any]:
+    schema = param.get("schema", {}) or {}
+    return {
+        "name": param["name"],
+        "in": param.get("in"),
+        "required": bool(param.get("required")) or param.get("in") == "path",
+        "type": schema.get("type", "string"),
+        "enum": schema.get("enum"),
+        "default": schema.get("default"),
+        "example": schema.get("example", param.get("example")),
+        "description": _first_line(param.get("description")),
+    }
+
+
+def _multipart_fields(operation_id: str) -> list[dict[str, Any]]:
+    schema = request_body_schema(operation_id, "multipart/form-data")
+    if not schema:
+        return []
+    required = set(schema.get("required", []))
+    fields = []
+    for name, prop in schema.get("properties", {}).items():
+        prop = prop if isinstance(prop, dict) else {}
+        fields.append(
+            {
+                "name": name,
+                "binary": prop.get("format") == "binary",
+                "required": name in required,
+                "type": prop.get("type", "string"),
+                "enum": prop.get("enum"),
+                "default": prop.get("default"),
+                "description": _first_line(prop.get("description")),
+            }
+        )
+    return fields
+
+
+@lru_cache(maxsize=1)
+def catalog() -> list[dict[str, Any]]:
+    """Every operation in the spec, summarised for a UI: method, path, params, body kind."""
+    entries = []
+    for operation_id, found in _operations().items():
+        op = found["op"]
+        content = (_inline(op.get("requestBody") or {})).get("content", {})
+        if "multipart/form-data" in content:
+            body_kind = "multipart"
+        elif "application/json" in content:
+            body_kind = "json"
+        else:
+            body_kind = None
+        entries.append(
+            {
+                "operationId": operation_id,
+                "method": found["method"],
+                "path": found["path"],
+                "tag": (op.get("tags") or ["Other"])[0],
+                "summary": _first_line(op.get("summary") or op.get("description")),
+                "parameters": [_param_summary(p) for p in parameters(operation_id).values()],
+                "body": body_kind,
+                "multipart": _multipart_fields(operation_id) if body_kind == "multipart" else [],
+            }
+        )
+    tag_order = [t["name"] for t in load_spec().get("tags", [])]
+    rank = {name: i for i, name in enumerate(tag_order)}
+    method_rank = {"GET": 0, "POST": 1, "PUT": 2, "DELETE": 3, "PATCH": 4}
+    entries.sort(
+        key=lambda e: (rank.get(e["tag"], len(rank)), e["path"], method_rank.get(e["method"], 9))
+    )
+    return entries
+
+
+def _is_read_only(schema: dict[str, Any]) -> bool:
+    description = str(schema.get("description", "")).lstrip().lower()
+    return description.startswith("[read-only]") or description.startswith("[read only]")
+
+
+def _coerce(value: Any, kind: str | None) -> Any:
+    """Fit a spec example to its declared type.
+
+    Several examples in the MITRE document are unquoted YAML scalars
+    (``version: 1.0``, ``fiscalYear: 2021``) on string fields, so a YAML
+    loader hands back numbers the schema itself rejects.
+    """
+    if value is None or kind is None:
+        return value
+    if kind == "string" and not isinstance(value, str):
+        return str(value)
+    if kind == "integer" and isinstance(value, str) and value.lstrip("-").isdigit():
+        return int(value)
+    if kind == "number" and isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _example_value(schema: Any, mode: str, depth: int = 0) -> Any:
+    if not isinstance(schema, dict) or depth > 12:
+        return None
+    declared = schema.get("type")
+    kind = (
+        next((t for t in declared if t != "null"), None) if isinstance(declared, list) else declared
+    )
+    if "example" in schema and kind not in ("object", "array"):
+        return _coerce(schema["example"], kind)
+    enum = [v for v in schema.get("enum") or [] if v is not None]
+    if enum:
+        return enum[0]
+    if "default" in schema and kind not in ("object", "array"):
+        return _coerce(schema["default"], kind)
+    if kind == "array":
+        return [_example_value(schema.get("items", {}), mode, depth + 1)]
+    if kind == "object" or "properties" in schema:
+        required = set(schema.get("required", []))
+        out = {}
+        for name, prop in schema.get("properties", {}).items():
+            if name in required or (mode == "full" and not _is_read_only(prop)):
+                out[name] = _example_value(prop, mode, depth + 1)
+        return out
+    if kind == "integer":
+        return 0
+    if kind == "number":
+        return 0.0
+    if kind == "boolean":
+        return False
+    if kind == "string":
+        return "string"
+    return None
+
+
+def example_body(operation_id: str, mode: str = "required") -> Any:
+    """A JSON request body for an operation built from the spec's own examples.
+
+    ``mode="required"`` fills only required fields; ``"full"`` fills every
+    writable field. Read-only fields are left out in both modes.
+    """
+    if mode not in ("required", "full"):
+        raise ValueError("mode must be 'required' or 'full'")
+    schema = request_body_schema(operation_id, "application/json")
+    if schema is None:
+        return None
+    return _example_value(_to_jsonschema(schema, _EXAMPLE_DROP), mode)
