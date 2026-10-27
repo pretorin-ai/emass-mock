@@ -71,6 +71,7 @@ async def clear_failures_ui() -> RedirectResponse:
 async def reset_ui(request: Request) -> RedirectResponse:
     from ..config import load_settings
 
-    get_store().reset(load_settings().seed_system_ids)
+    settings = load_settings()
+    get_store().reset(settings.seed_system_ids, settings.seed_assessment_procedures)
     get_failures().reset()
     return RedirectResponse(url="/ui/", status_code=303)

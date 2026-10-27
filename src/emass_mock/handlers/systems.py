@@ -1,39 +1,40 @@
-"""GET /api/systems and /api/systems/{id} — stateful handlers.
+"""GET /api/systems and /api/systems/{id} (``getSystems``, ``getSystem``).
 
 Returning our seeded system list gives integrators a deterministic anchor
 for "which systems exist in this mock?" tests. Without this, a test that
 asserts `system.systemId == 1` would break every time Prism re-rolls its
 `x-faker` IDs.
+
+The spec's filters (``coamsId``, ``ditprId``, ``includeDecommissioned``,
+``policy``, ``registrationType``, ...) are accepted and ignored. Neither
+operation is paginated in v3.22.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 
 from ..auth import require_emu_auth
-from ..envelope import error, ok
-from ..store import get_store
+from ..envelope import ok
+from ..store import SystemRecord, get_store
+from ._common import system_or_404
 
 router = APIRouter(prefix="/api", tags=["systems"], dependencies=[Depends(require_emu_auth)])
 
 
+def _row(record: SystemRecord) -> dict:
+    return {"systemId": record.system_id, "name": record.name, "acronym": record.acronym}
+
+
 @router.get("/systems")
-async def list_systems(
-    pageSize: int = Query(default=25, ge=1, le=1000),
-    pageIndex: int = Query(default=0, ge=0),
-):
-    systems = get_store().list_systems()
-    start = pageIndex * pageSize
-    page = [
-        {"systemId": s.system_id, "name": s.name, "acronym": s.acronym}
-        for s in systems[start : start + pageSize]
-    ]
-    return ok(page)
+async def list_systems():
+    return ok([_row(s) for s in get_store().list_systems()])
 
 
 @router.get("/systems/{system_id}")
 async def get_system(system_id: int):
-    record = get_store().get_system(system_id)
-    if record is None:
-        return error(404, f"System {system_id} not found")
-    return ok({"systemId": record.system_id, "name": record.name, "acronym": record.acronym})
+    record = system_or_404(system_id)
+    if isinstance(record, JSONResponse):
+        return record
+    return ok(_row(record))
