@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Console · emass-mock{% endblock %}
+{% block content %}
+<div style="margin-bottom: 1rem;">
+    <h1>Console</h1>
+    <p class="muted" style="margin:0">Pick any operation from the eMASS spec, fill it in, and send it to this mock. Bodies start from the spec's own examples. Validate checks a body against the spec without sending it.</p>
+</div>
+
+<div class="console">
+    <aside class="card op-list" aria-label="Operations">
+        <div class="field">
+            <label for="op-filter">Find an operation</label>
+            <input id="op-filter" type="search" placeholder="controls, poams, POST, milestone…" autocomplete="off" />
+        </div>
+        <label class="check small" style="margin-bottom:0.5rem"><input id="op-stateful" type="checkbox" checked /> Only operations this mock answers itself <span class="dot on" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok)"></span></label>
+        <div class="scroll" id="op-groups"><p class="empty">Loading operations…</p></div>
+    </aside>
+
+    <section style="min-width:0">
+        <div class="card" id="builder">
+            <p class="empty">Choose an operation on the left.</p>
+        </div>
+        <div class="card" id="response" hidden>
+            <h2 style="margin-top:0">Response</h2>
+            <div id="response-body"></div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+window.EMASS_MOCK = {{ {
+    "apiKey": settings.api_key,
+    "requireApiKey": settings.require_api_key,
+    "userUidOnAll": settings.require_user_uid_on_all,
+    "specVersion": spec_version,
+    "prism": settings.prism_url,
+}|tojson }};
+</script>
+<script src="/ui/static/console.js"></script>
+{% endblock %}

@@ -1,68 +1,80 @@
 {% extends "base.html" %}
-{% block title %}emass-mock — inspector{% endblock %}
+{% block title %}Dashboard · emass-mock{% endblock %}
 {% block content %}
-<h2>Systems</h2>
-<table>
-    <thead><tr><th>ID</th><th>Acronym</th><th>Controls</th><th>Test Results</th><th>Artifacts</th><th>POA&amp;Ms</th></tr></thead>
-    <tbody>
-    {% for s in systems %}
-        <tr>
-            <td><a href="/ui/systems/{{ s.system_id }}">{{ s.system_id }}</a></td>
-            <td>{{ s.acronym }}</td>
-            <td>{{ s.controls|length }}</td>
-            <td>{{ s.test_results|length }}</td>
-            <td>{{ s.artifacts|length }}</td>
-            <td>{{ s.poams|length }}</td>
-        </tr>
-    {% endfor %}
-    </tbody>
-</table>
+<div class="row" style="justify-content: space-between; margin-bottom: 1rem;">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="muted" style="margin:0">A stateful eMASS mock that validates every write against MITRE's OpenAPI spec. Point a client at <code>{{ request.base_url }}api</code> or try requests in the <a href="/ui/console">console</a>.</p>
+    </div>
+    <form action="/ui/reset" method="post" onsubmit="return confirm('Reset all stored data, failures, and procedure tables?')">
+        <button type="submit" class="danger">Reset mock state</button>
+    </form>
+</div>
 
-<h2>Failure injection</h2>
-<p>
-    <span class="pill {% if failures.global_status %}pill-alert{% endif %}">
-        global_status: {{ failures.global_status or "—" }}
-    </span>
-    <span class="pill">latency: {{ failures.latency_seconds }}s</span>
-    <span class="pill {% if failures.control_status %}pill-alert{% endif %}">
-        per-control: {{ failures.control_status|length }} rule(s)
-    </span>
-</p>
-{% if failures.control_status %}
-<ul>
-    {% for acronym, code in failures.control_status.items() %}
-        <li><code>{{ acronym }}</code> → <strong>{{ code }}</strong></li>
-    {% endfor %}
-</ul>
+{% if active_failures %}
+<div class="callout warn"><strong>{{ active_failures }} failure rule{{ 's' if active_failures != 1 }} active.</strong> Requests may not behave normally. <a href="/ui/failures">Review failures</a></div>
 {% endif %}
 
-<form action="/ui/failures" method="post">
-    <div class="grid">
-        <label>Global status override
-            <input type="number" name="global_status" placeholder="e.g. 503" value="{{ failures.global_status or '' }}" />
-        </label>
-        <label>Latency (seconds)
-            <input type="number" step="0.1" name="latency_seconds" value="{{ failures.latency_seconds }}" />
-        </label>
-    </div>
-    <div class="grid">
-        <label>Control acronym
-            <input type="text" name="control_acronym" placeholder="SC-7" />
-        </label>
-        <label>Status to return for that control
-            <input type="number" name="control_status" placeholder="422" />
-        </label>
-    </div>
-    <button type="submit">Apply</button>
-</form>
+<div class="grid cols-4">
+    <div class="card stat"><span class="label">Spec</span><span class="value">{{ spec_version }}</span><span class="muted small">MITRE emass_client</span></div>
+    <div class="card stat"><span class="label">api-key</span><span class="value mono" style="font-size:1rem">{{ settings.api_key if settings.require_api_key else "not checked" }}</span><span class="muted small">user-uid on {{ "every call" if settings.require_user_uid_on_all else "writes only" }}</span></div>
+    <div class="card stat"><span class="label">Unknown fields</span><span class="value">{{ unknown_fields }}</span><span class="muted small">EMASS_MOCK_UNKNOWN_FIELDS</span></div>
+    <div class="card stat"><span class="label">Unhandled paths</span><span class="value" style="font-size:1rem">{{ "Prism" if settings.prism_url else "501" }}</span><span class="muted small">{{ settings.prism_url or "PRISM_URL not set" }}</span></div>
+</div>
 
-<div class="grid">
-    <form action="/ui/failures/clear" method="post">
-        <button type="submit" class="secondary">Clear all failures</button>
-    </form>
-    <form action="/ui/reset" method="post"
-          onsubmit="return confirm('Reset all in-memory state?')">
-        <button type="submit" class="contrast">Reset mock state</button>
-    </form>
+<div class="card">
+    <h2>Systems</h2>
+    <div class="table-wrap">
+    <table>
+        <thead><tr>
+            <th>System</th><th class="num">Controls</th><th class="num">Test results</th><th class="num">POA&amp;Ms</th><th class="num">Milestones</th><th class="num">Artifacts</th><th class="num">HW</th><th class="num">SW</th><th class="num">Scans</th><th class="num">Procedures</th>
+        </tr></thead>
+        <tbody>
+        {% for s, c in systems %}
+            <tr>
+                <td><a href="/ui/systems/{{ s.system_id }}"><strong>{{ s.system_id }}</strong> · {{ s.acronym }}</a></td>
+                <td class="num">{{ c.controls }}</td>
+                <td class="num">{{ c.test_results }}</td>
+                <td class="num">{{ c.poams }}</td>
+                <td class="num">{{ c.milestones }}</td>
+                <td class="num">{{ c.artifacts }}</td>
+                <td class="num">{{ c.hardware }}</td>
+                <td class="num">{{ c.software }}</td>
+                <td class="num">{{ c.device_scans }}</td>
+                <td class="num">{{ c.procedures }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="row" style="justify-content: space-between;">
+        <h2 style="margin:0">Recent requests</h2>
+        <a href="/ui/traffic">Open live traffic</a>
+    </div>
+    {% if recent %}
+    <div class="table-wrap">
+    <table style="margin-top:0.5rem">
+        <thead><tr><th>#</th><th>Method</th><th>Path</th><th>Operation</th><th>Status</th><th>Handled by</th><th class="num">ms</th></tr></thead>
+        <tbody>
+        {% for e in recent %}
+            <tr>
+                <td><a href="/ui/traffic#{{ e.id }}">{{ e.id }}</a></td>
+                <td><span class="method {{ e.method }}">{{ e.method }}</span></td>
+                <td class="mono">{{ e.path }}{% if e.query %}?{{ e.query }}{% endif %}</td>
+                <td>{% if e.operation_id %}<code>{{ e.operation_id }}</code>{% else %}<span class="pill bad">not in spec</span>{% endif %}</td>
+                <td><span class="pill {{ 'ok' if e.status < 300 else ('warn' if e.status < 500 else 'bad') }}">{{ e.status }}</span>{% if e.spec_errors %} <span class="pill bad">{{ e.spec_errors|length }} spec</span>{% endif %}</td>
+                <td>{{ e.handled_by }}</td>
+                <td class="num">{{ e.duration_ms }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="empty">No requests yet. Send one from the <a href="/ui/console">console</a>, or point your client at this server.</p>
+    {% endif %}
 </div>
 {% endblock %}

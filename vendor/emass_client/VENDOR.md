@@ -13,7 +13,7 @@ This directory contains a pinned copy of files from [mitre/emass_client](https:/
 
 | File | Purpose |
 |------|---------|
-| `eMASSRestOpenApi.yaml` | OpenAPI 3.0.3 spec. Loaded by Stoplight Prism to generate spec-conformant responses. |
+| `eMASSRestOpenApi.yaml` | OpenAPI 3.0.3 spec (eMASS API v3.22). Loaded by Stoplight Prism to generate spec-conformant responses, and copied to `src/emass_mock/spec/` where the mock's request validation reads it. |
 | `LICENSE.md` | Apache 2.0 license as published by MITRE. |
 | `NOTICE.md` | MITRE copyright notice. |
 
@@ -27,6 +27,8 @@ Simpler for users (no `git submodule update --init` step). Updates are a deliber
 # From the root of this repo
 curl -L https://raw.githubusercontent.com/mitre/emass_client/<new-sha>/docs/eMASSRestOpenApi.yaml \
     -o vendor/emass_client/eMASSRestOpenApi.yaml
+# Keep the packaged copy identical (a test enforces this).
+cp vendor/emass_client/eMASSRestOpenApi.yaml src/emass_mock/spec/eMASSRestOpenApi.yaml
 # Update the commit SHA in this file.
 # Run the test suite, fix any shape drift, commit.
 ```

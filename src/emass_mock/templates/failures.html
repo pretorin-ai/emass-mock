@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Failures · emass-mock{% endblock %}
+{% block content %}
+<div class="row" style="justify-content: space-between; margin-bottom: 1rem;">
+    <div>
+        <h1>Failure injection</h1>
+        <p class="muted" style="margin:0">Force the mock to misbehave so you can test retries, partial-batch handling, and fallbacks. Rules apply to <code>/api</code> requests until cleared or reset.</p>
+    </div>
+    <form action="/ui/failures/clear" method="post"><button type="submit" class="danger" {{ 'disabled' if not active_failures }}>Clear all rules</button></form>
+</div>
+
+<div class="grid cols-2">
+    <div class="card">
+        <h2>Whole-server behaviour</h2>
+        <form action="/ui/failures/global" method="post">
+            <div class="grid cols-2">
+                <div class="field">
+                    <label for="global_status">Status for every request <span class="muted">(blank = off)</span></label>
+                    <input id="global_status" type="number" min="100" max="599" name="global_status" placeholder="503" value="{{ failures.global_status if failures.global_status is not none else '' }}" />
+                </div>
+                <div class="field">
+                    <label for="latency_seconds">Added latency (seconds)</label>
+                    <input id="latency_seconds" type="number" min="0" step="0.1" name="latency_seconds" value="{{ failures.latency_seconds }}" />
+                </div>
+            </div>
+            <div class="field">
+                <label class="check"><input type="checkbox" name="artifact_force_empty" {{ 'checked' if failures.artifact_force_empty }} /> Artifact uploads return 200 with an empty <code>data</code> array</label>
+                <p class="muted small" style="margin:0.25rem 0 0">Models a proxy that swallows the per-row confirmation. A correct client must not treat that as success.</p>
+            </div>
+            <button type="submit" class="primary">Apply</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Add a targeted rule</h2>
+        <form action="/ui/failures/rule" method="post">
+            <div class="field">
+                <label for="kind">Rule type</label>
+                <select id="kind" name="kind">
+                    <option value="control">Control acronym (fails that row in a controls PUT)</option>
+                    <option value="path">Exact path (whole request returns the status)</option>
+                    <option value="artifact_suffix">Artifact filename suffix (rejects matching uploads)</option>
+                </select>
+            </div>
+            <div class="grid cols-2">
+                <div class="field">
+                    <label for="key">Match</label>
+                    <input id="key" type="text" name="key" required placeholder="SC-7, /api/systems/1/controls, or .cklb" />
+                </div>
+                <div class="field">
+                    <label for="status">Status</label>
+                    <input id="status" type="number" min="100" max="599" name="status" required value="422" />
+                </div>
+            </div>
+            <p class="muted small">Tip: <code>409</code> on a path is how eMASS reports a batch that was too large.</p>
+            <button type="submit" class="primary">Add rule</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Active rules</h2>
+    {% set rules = [] %}
+    {% for key, code in failures.control_status.items() %}{% set _ = rules.append(("control", "Control", key, code)) %}{% endfor %}
+    {% for key, code in failures.path_status.items() %}{% set _ = rules.append(("path", "Path", key, code)) %}{% endfor %}
+    {% for key, code in failures.artifact_filename_status.items() %}{% set _ = rules.append(("artifact_suffix", "Artifact suffix", key, code)) %}{% endfor %}
+    {% if failures.global_status is not none or failures.latency_seconds > 0 or failures.artifact_force_empty or rules %}
+    <div class="table-wrap">
+    <table>
+        <thead><tr><th>Type</th><th>Match</th><th>Effect</th><th></th></tr></thead>
+        <tbody>
+        {% if failures.global_status is not none %}
+            <tr><td>Global</td><td class="muted">every request</td><td><span class="pill bad">{{ failures.global_status }}</span></td><td></td></tr>
+        {% endif %}
+        {% if failures.latency_seconds > 0 %}
+            <tr><td>Latency</td><td class="muted">every request</td><td><span class="pill warn">+{{ failures.latency_seconds }}s</span></td><td></td></tr>
+        {% endif %}
+        {% if failures.artifact_force_empty %}
+            <tr><td>Artifacts</td><td class="muted">every upload</td><td><span class="pill warn">empty data</span></td><td></td></tr>
+        {% endif %}
+        {% for kind, label, key, code in rules %}
+            <tr>
+                <td>{{ label }}</td>
+                <td><code>{{ key }}</code></td>
+                <td><span class="pill bad">{{ code }}</span></td>
+                <td class="num">
+                    <form action="/ui/failures/rule/delete" method="post" style="display:inline">
+                        <input type="hidden" name="kind" value="{{ kind }}" />
+                        <input type="hidden" name="key" value="{{ key }}" />
+                        <button type="submit" class="small danger">Remove</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <p class="muted small" style="margin-top:0.5rem">Use the forms above to change whole-server settings.</p>
+    {% else %}
+    <p class="empty">No failure rules. The mock is behaving normally.</p>
+    {% endif %}
+</div>
+{% endblock %}

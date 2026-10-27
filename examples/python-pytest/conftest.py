@@ -51,11 +51,9 @@ def reset_emass_state(emass_base_url: str) -> Iterator[None]:
 
 @pytest.fixture
 def inject_failure(emass_base_url: str):
-    """Factory: call inject_failure(global_status=503) or inject_failure(control_status={'SC-7': 422})."""
+    """Factory: ``inject_failure(global_status=503)`` or ``inject_failure(control_status=...)``."""
 
     def _apply(**kwargs) -> None:
-        httpx.post(
-            f"{emass_base_url}/_admin/failures", json=kwargs, timeout=5.0
-        ).raise_for_status()
+        httpx.post(f"{emass_base_url}/_admin/failures", json=kwargs, timeout=5.0).raise_for_status()
 
     return _apply

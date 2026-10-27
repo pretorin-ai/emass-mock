@@ -1,21 +1,19 @@
-"""POST /api/systems/{systemId}/artifacts — stateful handler.
+"""POST and GET /api/systems/{systemId}/artifacts.
 
-Response shape matches MITRE spec `ArtifactsResponsePutPost` — each data item:
-    {"filename": str, "success": bool, "systemId": int, "errors": {...}?}
+POST (``addArtifactsBySystemId``) is ``multipart/form-data`` only, as in the
+spec: a required binary part plus optional ``isTemplate`` / ``type`` /
+``category`` text fields and an ``isBulk`` query parameter (``true`` means
+the single file is a ``.zip`` of artifacts). A JSON body is a 400; the real
+endpoint does not take one.
 
-The real artifacts endpoint accepts a ``multipart/form-data`` upload of a single
-binary file (per the MITRE OpenAPI: a required ``filename`` file part plus optional
-``isTemplate`` / ``type`` / ``category`` fields). This handler accepts **both**:
+The spec names the binary part ``filename``. ``deathlabs/emu``, validated
+against the live DoD instance, sends it as ``file``. Until that is settled
+against a real instance the mock accepts both and records which one arrived
+(``_part_name`` in the admin view) so a caller can see what it sent.
 
-* ``multipart/form-data`` — the real upload contract. The binary ``filename`` part
-  is read and its bytes are recorded (base64) so integration tests can assert the
-  exact file eMASS received (e.g. a generated STIG ``.cklb``/``.ckl``). This lets
-  callers exercise real file-upload code paths against the live harness rather than
-  stubbing the HTTP client.
-* ``application/json`` — a JSON descriptor (list or single object), kept for the
-  metadata-only ergonomics the harness shipped with originally.
-
-Both branches mirror the upload into the store and echo the spec response shape.
+The uploaded bytes are kept so an integration test can read back exactly what
+eMASS received (``GET /_admin/systems/{id}/artifacts``). The public GET
+(``getSystemArtifacts``) returns spec-shaped rows only.
 """
 
 from __future__ import annotations
@@ -23,96 +21,100 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
 from starlette.datastructures import UploadFile
 
 from ..auth import require_emu_auth
 from ..envelope import error, ok
 from ..failures import get_failures
-from ..store import get_store
+from ._common import as_bool, system_or_404
+
+OPERATION_POST = "addArtifactsBySystemId"
+OPERATION_GET = "getSystemArtifacts"
+
+# Spec part name first, the emu-observed name second.
+FILE_PART_NAMES = ("filename", "file")
 
 router = APIRouter(prefix="/api", tags=["artifacts"], dependencies=[Depends(require_emu_auth)])
 
 
-def _as_bool(value: Any) -> bool:
-    """Coerce a multipart form string ('true'/'false') to a bool."""
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"true", "1", "yes"}
+def public_row(stored: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in stored.items() if not key.startswith("_")}
 
 
-async def _parse_multipart(request: Request) -> list[dict[str, Any]]:
-    """Parse the real eMASS multipart artifact upload into store descriptors.
+Upload = tuple[str, UploadFile, bytes, dict[str, Any]]
 
-    The binary file rides in the ``filename`` part (matching the OpenAPI schema and
-    the client's ``upload_artifact_file``). We record its bytes (base64) + size so a
-    test can read the artifact back and validate the exact content uploaded.
-    """
-    form = await request.form()
-    items: list[dict[str, Any]] = []
-    upload = form.get("filename")
-    descriptor: dict[str, Any] = {
-        "isTemplate": _as_bool(form.get("isTemplate")),
-        "type": form.get("type") or "Other",
-        "category": form.get("category") or "Evidence",
-    }
-    if isinstance(upload, UploadFile):
+
+async def read_upload(request: Request) -> Upload | JSONResponse:
+    """Parse a multipart upload; returns (part_name, upload, content, text_fields) or a 400."""
+    content_type = (request.headers.get("content-type") or "").lower()
+    if not content_type.startswith("multipart/form-data"):
+        return error(
+            400,
+            "This endpoint takes multipart/form-data with a binary part named "
+            f"{FILE_PART_NAMES[0]!r}; got {content_type or 'no content-type'}",
+        )
+    async with request.form() as form:
+        part_name = next((n for n in FILE_PART_NAMES if isinstance(form.get(n), UploadFile)), None)
+        if part_name is None:
+            return error(400, f"multipart body is missing the binary part {FILE_PART_NAMES[0]!r}")
+        upload = form[part_name]
+        assert isinstance(upload, UploadFile)
         content = await upload.read()
-        descriptor["filename"] = upload.filename
-        descriptor["size"] = len(content)
-        descriptor["content_b64"] = base64.b64encode(content).decode("ascii")
-    else:
-        # A plain string in the file field — descriptor-only multipart.
-        descriptor["filename"] = upload
-    items.append(descriptor)
-    return items
+        fields = {k: v for k, v in form.items() if k != part_name and not isinstance(v, UploadFile)}
+        return part_name, upload, content, fields
 
 
 @router.post("/systems/{system_id}/artifacts")
-async def upload_artifacts(system_id: int, request: Request):
-    record = get_store().get_system(system_id)
-    if record is None:
-        return error(404, f"System {system_id} not found")
+async def upload_artifacts(system_id: int, request: Request, isBulk: bool = Query(default=False)):
+    record = system_or_404(system_id)
+    if isinstance(record, JSONResponse):
+        return record
 
-    content_type = (request.headers.get("content-type") or "").lower()
-    if content_type.startswith("multipart/form-data"):
-        items = await _parse_multipart(request)
-    else:
-        payload = await request.json()
-        items = payload if isinstance(payload, list) else [payload]
+    parsed = await read_upload(request)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    part_name, upload, content, fields = parsed
+    name = upload.filename or ""
+    if isBulk and not name.lower().endswith(".zip"):
+        return error(400, "isBulk=true requires a single file with the .zip extension")
 
     failures = get_failures()
-
-    # Per-filename-suffix rejection: lets a test reject one format (e.g. ".cklb")
-    # while accepting another (".ckl") on this shared path, to exercise fallbacks.
-    if failures.artifact_filename_status:
-        for art in items:
-            name = (art.get("filename") or "").lower()
-            for suffix, status_code in failures.artifact_filename_status.items():
-                if name.endswith(suffix.lower()):
-                    return error(status_code, f"Injected artifact rejection for {suffix}")
-
-    # Force a 2xx with no per-row confirmation (non-compliant/proxied server).
+    lowered = name.lower()
+    for suffix, status_code in failures.artifact_filename_status.items():
+        if lowered.endswith(suffix.lower()):
+            return error(status_code, f"Injected artifact rejection for {suffix}")
     if failures.artifact_force_empty:
         return ok([])
 
-    data: list[dict[str, Any]] = []
-    for art in items:
-        stored = {**art, "systemId": system_id}
-        record.artifacts.append(stored)
-        data.append(
-            {
-                "filename": art.get("filename"),
-                "success": True,
-                "systemId": system_id,
-            }
-        )
-    return ok(data)
+    record.artifacts.append(
+        {
+            "systemId": system_id,
+            "filename": name,
+            "isTemplate": as_bool(fields.get("isTemplate", False)),
+            "type": fields.get("type") or "Other",
+            "category": fields.get("category") or "Evidence",
+            "name": name,
+            "isInherited": False,
+            "fileSize": str(len(content)),
+            "mimeContentType": upload.content_type,
+            "_part_name": part_name,
+            "_is_bulk": isBulk,
+            "_content_b64": base64.b64encode(content).decode("ascii"),
+        }
+    )
+    return ok([{"filename": name, "success": True, "systemId": system_id}])
 
 
 @router.get("/systems/{system_id}/artifacts")
-async def list_artifacts(system_id: int):
-    record = get_store().get_system(system_id)
-    if record is None:
-        return error(404, f"System {system_id} not found")
-    return ok(record.artifacts)
+async def list_artifacts(system_id: int, filename: str | None = Query(default=None)):
+    record = system_or_404(system_id)
+    if isinstance(record, JSONResponse):
+        return record
+    rows = [
+        public_row(art)
+        for art in record.artifacts
+        if filename is None or art["filename"] == filename
+    ]
+    return ok(rows)

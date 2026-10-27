@@ -18,9 +18,17 @@ from fastapi.responses import JSONResponse, Response
 from .config import load_settings
 
 _HOP_BY_HOP = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailers", "transfer-encoding", "upgrade", "content-encoding",
-    "content-length", "host",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "content-encoding",
+    "content-length",
+    "host",
 }
 
 
@@ -50,9 +58,7 @@ async def proxy_to_prism(request: Request) -> Response:
     body = await request.body()
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        upstream = await client.request(
-            request.method, target, content=body, headers=headers
-        )
+        upstream = await client.request(request.method, target, content=body, headers=headers)
 
     passthrough_headers = {
         k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_BY_HOP

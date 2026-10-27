@@ -2,38 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>{% block title %}emass-mock{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <style>
-        .mock-banner {
-            background: #ffb300;
-            color: #000;
-            text-align: center;
-            padding: 0.5rem;
-            font-weight: 600;
-            letter-spacing: 0.05em;
-        }
-        main.container { padding-top: 1rem; }
-        .grid-kv { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; }
-        .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #eee; font-size: 0.85em; }
-        .pill-alert { background: #ffe0e0; }
-        pre { max-height: 24rem; overflow: auto; }
-    </style>
+    <title>{% block title %}emass-mock{% endblock %}</title>
+    <link rel="stylesheet" href="/ui/static/ui.css" />
 </head>
 <body>
-    <div class="mock-banner">
-        MOCK — this is emass-mock, not a real eMASS deployment. Not affiliated with DoD or MITRE.
-    </div>
-    <main class="container">
-        <nav>
-            <ul><li><strong><a href="/ui/">emass-mock</a></strong></li></ul>
-            <ul>
-                <li><a href="/docs">API docs</a></li>
-                <li><a href="https://github.com/pretorin-ai/emass-mock" target="_blank">GitHub</a></li>
-            </ul>
-        </nav>
+    <div class="banner">MOCK: this is emass-mock, not a real eMASS deployment. Not affiliated with DoD, DISA, or MITRE.</div>
+    <header class="top">
+        <div class="inner">
+            <a class="brand" href="/ui/">emass-mock<small>eMASS API {{ spec_version }}</small></a>
+            <nav class="main" aria-label="Main">
+                <a href="/ui/" class="{{ 'active' if active == 'dashboard' }}">Dashboard</a>
+                <a href="/ui/console" class="{{ 'active' if active == 'console' }}">Console</a>
+                <a href="/ui/traffic" class="{{ 'active' if active == 'traffic' }}">Traffic</a>
+                <a href="/ui/failures" class="{{ 'active' if active == 'failures' }}">Failures{% if active_failures %} <span class="pill bad">{{ active_failures }}</span>{% endif %}</a>
+            </nav>
+            <span class="spacer"></span>
+            <div class="meta">
+                <a href="/docs">Harness API</a>
+                <a href="https://github.com/pretorin-ai/emass-mock" target="_blank" rel="noopener">GitHub</a>
+            </div>
+        </div>
+    </header>
+    <main class="page">
         {% block content %}{% endblock %}
     </main>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

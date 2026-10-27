@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Traffic · emass-mock{% endblock %}
+{% block content %}
+<div class="row" style="justify-content: space-between; margin-bottom: 1rem;">
+    <div>
+        <h1>Traffic</h1>
+        <p class="muted" style="margin:0">Every request this mock received under <code>/api</code>, newest first. Point your client at <code>{{ request.base_url }}api</code> and watch what it sends. The last {{ traffic_limit }} requests are kept in memory.</p>
+    </div>
+    <div class="row">
+        <label class="check" style="margin:0"><input id="live" type="checkbox" checked /> Live</label>
+        <button type="button" class="danger" id="clear">Clear log</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="grid cols-4">
+        <div class="field" style="margin:0"><label for="f-text">Filter</label><input id="f-text" type="search" placeholder="path or operation" /></div>
+        <div class="field" style="margin:0"><label for="f-status">Status</label>
+            <select id="f-status"><option value="">Any</option><option value="2">2xx</option><option value="4">4xx</option><option value="5">5xx</option></select></div>
+        <div class="field" style="margin:0"><label for="f-handled">Handled by</label>
+            <select id="f-handled"><option value="">Any</option><option value="stateful">mock</option><option value="prism">Prism</option><option value="unhandled">unhandled (501)</option><option value="injected">injected failure</option></select></div>
+        <div class="field" style="margin:0; align-self: end"><label class="check"><input id="f-spec" type="checkbox" /> Only spec problems</label></div>
+    </div>
+</div>
+
+<div class="split">
+    <div class="card" style="padding:0">
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Time</th><th>Request</th><th>Status</th><th>Auth</th><th class="num">ms</th></tr></thead>
+                <tbody id="rows"></tbody>
+            </table>
+        </div>
+        <p class="empty" id="no-rows">No requests yet.</p>
+    </div>
+    <div class="detail-sticky">
+        <div class="card" id="detail"><p class="empty">Select a request to see what was sent and what came back.</p></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/ui/static/traffic.js"></script>
+{% endblock %}
